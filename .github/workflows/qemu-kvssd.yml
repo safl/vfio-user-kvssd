@@ -57,6 +57,14 @@ jobs:
           tar -C /opt/zig --strip-components=1 -xf /tmp/zig.tar.xz
           echo "/opt/zig" >> "$GITHUB_PATH"
 
+      - name: Install cloud-image-utils
+        # TEMPORARY: until the nosi image ships cloud-image-utils. Provides
+        # cloud-localds, used to build the guest's cloud-init seed.
+        run: |
+          command -v cloud-localds >/dev/null 2>&1 || {
+            apt-get update && apt-get install -y --no-install-recommends cloud-image-utils
+          }
+
       - name: Verify environment
         # The nosi ubuntu-2604-docker image is expected to provide the full
         # host toolchain (QEMU >= 10.1 with vfio-user, cijoe, zig) plus the
