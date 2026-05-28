@@ -119,10 +119,12 @@ main(int argc, char **argv)
 	msix.hdr.id = PCI_CAP_ID_MSIX;
 	msix.hdr.next = 0;
 	msix.mxc.ts = NVME_NUM_IRQS - 1; /* table size, 0-based */
+	/* The 'to'/'pbao' fields are bits [31:3] of the Table/PBA Offset+BIR
+	 * register, i.e. the byte offset >> 3 (low 3 bits hold the BIR). */
 	msix.mtab.tbir = NVME_MSIX_BAR;
-	msix.mtab.to = NVME_MSIX_TABLE_OFFSET;
+	msix.mtab.to = NVME_MSIX_TABLE_OFFSET >> 3;
 	msix.mpba.pbir = NVME_MSIX_BAR;
-	msix.mpba.pbao = NVME_MSIX_PBA_OFFSET;
+	msix.mpba.pbao = NVME_MSIX_PBA_OFFSET >> 3;
 	if (vfu_pci_add_capability(vfu, 0, 0, &msix) < 0) {
 		perror("vfu_pci_add_capability MSI-X");
 		goto err;
