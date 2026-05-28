@@ -12,9 +12,10 @@ doc: |
   1. Build the static vfu_kvssd device (host, zig).
   2. Start vfu_kvssd, then boot the guest with a shareable memfd backend and
      ``-device vfio-user-pci`` attached to the device's socket.
-  3. Wait for guest SSH, install + build xNVMe in the guest.
-  4. Run the xNVMe KV tests against the emulated KV namespace (/dev/ng0n1).
-  5. Power off, wait for QEMU to exit, stop the device.
+  3. Wait for guest SSH; verify the device enumerated on the PCI bus (lspci).
+  4. Install deps (xNVMe's debian-trixie.sh) + build xNVMe slim (kernel backend).
+  5. Run the xNVMe KV tests against the emulated KV namespace (/dev/ng0n1).
+  6. Power off, wait for QEMU to exit, stop the device.
 
   Requires KVM and QEMU >= 10.1; intended for GHA via .github/workflows/qemu-kvssd.yml.
 
@@ -43,20 +44,33 @@ steps:
     # ~120s nested-KVM boot; 600s is a comfortable ceiling.
     timeout: 600
 
-- name: provision_guest
+- name: verify_device
+  # Quick verification that the vfio-user device enumerated, before the heavier
+  # xNVMe build. The emulated controller is vendor 1d1d:1f1f (NVMe class).
   uses: core.cmdrunner
   with:
     transport: ssh
     commands:
     - "cloud-init status --wait || true"
     - "uname -a"
-    - "apt-get update && apt-get install -y --no-install-recommends git nvme-cli"
-    # The KV namespace shows up as a generic char device (not a block device).
-    - "ls -l /dev/ng* /dev/nvme*"
+    - "apt-get update && apt-get install -y --no-install-recommends pciutils nvme-cli git"
+    - "lspci -nn"
+    - "lspci -d 1d1d:1f1f -nn | grep -qi . || { echo 'ERROR: vfu_kvssd not on PCI bus'; exit 1; }"
+    # KV namespace shows up as a generic char device (not a block device).
+    - "ls -l /dev/ng* /dev/nvme* 2>&1 || true"
     - "nvme list || true"
+
+- name: build_xnvme
+  uses: core.cmdrunner
+  with:
+    transport: ssh
+    commands:
     - "git clone --recursive --depth 1 https://github.com/xnvme/xnvme.git"
+    # xNVMe's own dependency script (installs build deps + libvfn).
     - "cd xnvme && ./toolbox/pkgs/debian-trixie.sh"
-    - "cd xnvme && make && make install && ldconfig"
+    # Slim build (kernel /dev/ng ioctl backend only: no SPDK/liburing/libvfn/
+    # libaio/isal). 'clean' ensures a fresh builddir for 'config-slim'.
+    - "cd xnvme && make clean config-slim build install && ldconfig"
 
 - name: kv_test
   uses: core.cmdrunner
