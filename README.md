@@ -6,6 +6,8 @@
 
 [![ci](https://github.com/safl/vfio-user-kvssd/actions/workflows/ci.yml/badge.svg)](https://github.com/safl/vfio-user-kvssd/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
+[![built with Zig](https://img.shields.io/badge/built%20with-Zig%200.16.0-f7a41d.svg)](https://ziglang.org)
+[![static musl](https://img.shields.io/badge/static%20musl-x86__64%20%7C%20aarch64-blue.svg)](https://github.com/safl/vfio-user-kvssd/releases)
 
 ## Why this exists
 
