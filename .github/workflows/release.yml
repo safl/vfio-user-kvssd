@@ -32,9 +32,10 @@ jobs:
         run: |
           set -eu
           mkdir -p dist
+          ver="${GITHUB_REF_NAME#v}"   # tag v0.1.0 -> 0.1.0
           for tgt in x86_64-linux-musl aarch64-linux-musl; do
             arch=${tgt%%-*}
-            zig build -Dtarget="$tgt" -Dstatic=true -Doptimize=ReleaseSafe
+            zig build -Dtarget="$tgt" -Dstatic=true -Doptimize=ReleaseSafe -Dversion="$ver"
             out="dist/vfu_kvssd-${arch}-linux"
             cp zig-out/bin/vfu_kvssd "$out"
             file "$out"

@@ -23,10 +23,15 @@ on_signal(int sig)
 	g_stop = 1;
 }
 
+#ifndef VFU_KVSSD_VERSION
+#define VFU_KVSSD_VERSION "unknown"
+#endif
+
 static void
 usage(const char *argv0)
 {
 	fprintf(stderr, "usage: %s -s <socket-path>\n", argv0);
+	fprintf(stderr, "       %s -V    (print version)\n", argv0);
 }
 
 /*
@@ -64,11 +69,14 @@ main(int argc, char **argv)
 	uint8_t *cfg;
 	int opt, ret;
 
-	while ((opt = getopt(argc, argv, "s:h")) != -1) {
+	while ((opt = getopt(argc, argv, "s:hV")) != -1) {
 		switch (opt) {
 		case 's':
 			sock = optarg;
 			break;
+		case 'V':
+			printf("vfu_kvssd %s\n", VFU_KVSSD_VERSION);
+			return 0;
 		default:
 			usage(argv[0]);
 			return 2;

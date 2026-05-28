@@ -78,6 +78,8 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const want_static = b.option(bool, "static",
         "Link statically (use with -Dtarget=x86_64-linux-musl)") orelse false;
+    const version = b.option([]const u8, "version",
+        "Version string reported by --version") orelse "0.1.0-dev";
 
     // The kvssd device. Strip in release builds (zig strips cross-arch).
     const kvssd_mod = b.createModule(.{
@@ -93,6 +95,7 @@ pub fn build(b: *std.Build) void {
         .files = &kvssd_sources,
         .flags = &.{ "-std=gnu11", "-D_GNU_SOURCE", "-Wall", "-Wextra", "-include", "third_party/musl-compat/prelude.h" },
     });
+    kvssd_mod.addCMacro("VFU_KVSSD_VERSION", b.fmt("\"{s}\"", .{version}));
     const kvssd = b.addExecutable(.{ .name = "vfu_kvssd", .root_module = kvssd_mod });
     if (want_static) kvssd.linkage = .static;
     b.installArtifact(kvssd);
