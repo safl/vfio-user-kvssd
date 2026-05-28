@@ -1,0 +1,106 @@
+doc: |
+  vfu_kvssd end-to-end bring-up under QEMU
+  ========================================
+
+  Validates the vfio-user KV SSD against a real guest kernel + xNVMe, the part
+  the local client harness cannot cover.
+
+  1. Build the static vfu_kvssd device (host, zig).
+  2. Build QEMU >= 10.1 from source (the vfio-user client landed in 10.1; distro
+     QEMU is too old).
+  3. Initialize the guest from a Debian cloud image (cloud-init enables root SSH).
+  4. Start vfu_kvssd, then boot the guest with a shareable memfd backend and
+     ``-device vfio-user-pci`` attached to the device's socket.
+  5. Wait for guest SSH, install + build xNVMe in the guest.
+  6. Run the xNVMe KV tests against the emulated KV namespace (/dev/ng0n1).
+  7. Power off, wait for QEMU to exit, stop the device.
+
+  Requires KVM and QEMU >= 10.1; intended for GHA via .github/workflows/qemu-kvssd.yml.
+
+steps:
+- name: build_kvssd
+  uses: core.cmdrunner
+  with:
+    transport: initiator
+    commands:
+    # cijoe runs from cijoe/; build at the repo root (one level up).
+    - "cd .. && zig build -Dtarget=x86_64-linux-musl -Dstatic=true -Doptimize=ReleaseSafe && file zig-out/bin/vfu_kvssd"
+
+- name: fetch_qemu
+  uses: core.cmdrunner
+  with:
+    transport: initiator
+    commands:
+    # qemu.build expects the repo present at qemu.repository.path; clone the
+    # tag (>= 10.1 for the vfio-user client) if it is not already there.
+    - "test -d $HOME/git/qemu || git clone --depth 1 --branch v10.1.0 --recurse-submodules https://github.com/qemu/qemu.git $HOME/git/qemu"
+
+- name: build_qemu
+  uses: qemu.build
+
+- name: init_guest
+  uses: qemu.guest_initialize
+  with:
+    guest_name: kvssd_amd64
+
+- name: start
+  # Starts the vfu_kvssd server and boots the guest with the vfio-user device.
+  uses: vfu_kvssd_start
+  with:
+    guest_name: kvssd_amd64
+
+- name: wait_for_guest_ssh
+  uses: core.wait_for_transport
+  with:
+    state: up
+    transport_name: ssh
+    # First boot runs cloud-init (host-key gen, SSH enable) on top of the
+    # ~120s nested-KVM boot; 600s is a comfortable ceiling.
+    timeout: 600
+
+- name: provision_guest
+  uses: core.cmdrunner
+  with:
+    transport: ssh
+    commands:
+    - "cloud-init status --wait || true"
+    - "uname -a"
+    - "apt-get update && apt-get install -y --no-install-recommends git nvme-cli"
+    # The KV namespace shows up as a generic char device (not a block device).
+    - "ls -l /dev/ng* /dev/nvme*"
+    - "nvme list || true"
+    - "git clone --recursive --depth 1 https://github.com/xnvme/xnvme.git"
+    - "cd xnvme && ./toolbox/pkgs/debian-trixie.sh"
+    - "cd xnvme && make && make install && ldconfig"
+
+- name: kv_test
+  uses: core.cmdrunner
+  with:
+    transport: ssh
+    commands:
+    # Enumerate + identify the KV namespace, then run xNVMe's own KV I/O tests
+    # (same invocations as xNVMe's cijoe suite) against /dev/ng0n1.
+    - "kvs enum"
+    - "kvs idfy-ns /dev/ng0n1 --nsid 1"
+    - "xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1"
+    - "xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1 --key tango --value charlie"
+
+- name: poweroff_guest
+  uses: core.cmdrunner
+  with:
+    transport: ssh
+    commands:
+    - "systemctl poweroff -i || poweroff -f || true"
+
+- name: wait_for_termination
+  uses: qemu.guest_wait_for_termination
+  with:
+    guest_name: kvssd_amd64
+    timeout: 60
+
+- name: stop_device
+  uses: core.cmdrunner
+  with:
+    transport: initiator
+    commands:
+    - "pkill -f 'vfu_kvssd -s' || true"

@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  ZIG_VERSION: "0.16.0"
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Zig
+        run: |
+          curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz
+          mkdir -p "$HOME/zig"
+          tar -C "$HOME/zig" --strip-components=1 -xf /tmp/zig.tar.xz
+          echo "$HOME/zig" >> "$GITHUB_PATH"
+
+      - name: Unit tests (KV handlers)
+        run: zig build test
+
+      - name: Build (native) and run client harness
+        run: |
+          zig build
+          ./tests/run_harness.sh zig-out/bin
+
+      - name: Build static musl single binary
+        run: zig build -Dtarget=x86_64-linux-musl -Dstatic=true -Doptimize=ReleaseSafe
+
+      - name: Verify the binary is fully static
+        run: |
+          file zig-out/bin/vfu_kvssd
+          if ldd zig-out/bin/vfu_kvssd 2>&1 | grep -qv "not a dynamic executable"; then
+            echo "ERROR: vfu_kvssd is not statically linked" >&2
+            ldd zig-out/bin/vfu_kvssd || true
+            exit 1
+          fi
+
+      - name: Run client harness against the static binary
+        run: ./tests/run_harness.sh zig-out/bin
+
+      - name: Strip and upload artifact
+        run: |
+          "$HOME/zig/zig" build -Dtarget=x86_64-linux-musl -Dstatic=true -Doptimize=ReleaseSafe
+          strip zig-out/bin/vfu_kvssd zig-out/bin/vfu_kvssd_harness || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vfu_kvssd-x86_64-linux-musl
+          path: |
+            zig-out/bin/vfu_kvssd
+            zig-out/bin/vfu_kvssd_harness

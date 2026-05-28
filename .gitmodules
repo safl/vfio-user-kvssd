@@ -1,0 +1,7 @@
+[submodule "subprojects/libvfio-user"]
+	path = subprojects/libvfio-user
+	url = https://github.com/nutanix/libvfio-user
+[submodule "subprojects/json-c"]
+	path = subprojects/json-c
+	url = https://github.com/json-c/json-c
+	branch = json-c-0.18

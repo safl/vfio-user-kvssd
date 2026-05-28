@@ -1,0 +1,101 @@
+name: qemu-kvssd
+
+# End-to-end bring-up: boot a guest on QEMU >= 10.1, attach vfu_kvssd over
+# vfio-user, and run the xNVMe KV tests against the emulated KV namespace.
+# Heavy (builds QEMU from source, boots a VM under nested KVM), so it is
+# opt-in rather than part of the per-push CI.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - cijoe/**
+      - src/**
+      - include/**
+      - build.zig
+      - .github/workflows/qemu-kvssd.yml
+
+env:
+  ZIG_VERSION: "0.16.0"
+  DEBIAN_CLOUD_URL: "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2"
+
+jobs:
+  bringup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install host dependencies (QEMU build + image tooling)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build meson pkg-config python3 python3-venv python3-pip \
+            libglib2.0-dev libpixman-1-dev libslirp-dev zlib1g-dev \
+            flex bison libfdt-dev \
+            qemu-utils cloud-image-utils genisoimage curl xz-utils pipx git
+          pipx ensurepath
+
+      - name: Install Zig ${{ env.ZIG_VERSION }}
+        run: |
+          curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz
+          mkdir -p "$HOME/zig"
+          tar -C "$HOME/zig" --strip-components=1 -xf /tmp/zig.tar.xz
+          echo "$HOME/zig" >> "$GITHUB_PATH"
+
+      - name: Enable KVM access for the runner
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo kvm-ok || true
+          ls -l /dev/kvm
+
+      - name: Install cijoe
+        run: pipx install cijoe
+
+      - name: Cache QEMU source tree
+        uses: actions/cache@v4
+        with:
+          path: ~/git/qemu
+          key: qemu-v10.1.0-src
+
+      - name: Stage Debian cloud image
+        run: |
+          mkdir -p "$HOME/system_imaging/cloud" "$HOME/guests/kvssd-amd64"
+          img="$HOME/system_imaging/cloud/debian-13-x86_64.qcow2"
+          curl -fsSL "$DEBIAN_CLOUD_URL" -o "$img"
+          # Room for apt + an in-guest xNVMe build; cloud-init growpart grows
+          # the rootfs to fill the resized disk on first boot.
+          qemu-img resize "$img" +12G
+
+      - name: Build cloud-init seed (enable root SSH for the cijoe transport)
+        run: |
+          ud=/tmp/user-data
+          echo '#cloud-config'        >  "$ud"
+          echo 'ssh_pwauth: true'     >> "$ud"
+          echo 'disable_root: false'  >> "$ud"
+          echo 'chpasswd:'            >> "$ud"
+          echo '  expire: false'      >> "$ud"
+          echo '  list: |'            >> "$ud"
+          echo '    root:root'        >> "$ud"
+          echo 'runcmd:'              >> "$ud"
+          echo "  - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config" >> "$ud"
+          echo '  - systemctl restart ssh' >> "$ud"
+          printf 'instance-id: kvssd\nlocal-hostname: kvssd\n' > /tmp/meta-data
+          cloud-localds "$HOME/guests/kvssd-amd64/seed.iso" "$ud" /tmp/meta-data
+
+      - name: Run cijoe bring-up
+        run: cd cijoe && cijoe tasks/test-kvssd.yaml --monitor -c configs/qemu-kvssd.toml
+
+      - name: Upload cijoe report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cijoe-kvssd-report
+          path: cijoe/cijoe-output/
+          if-no-files-found: warn
+          retention-days: 14
