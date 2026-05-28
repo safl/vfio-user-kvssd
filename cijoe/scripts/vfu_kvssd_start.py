@@ -70,6 +70,14 @@ def main(args, cijoe):
         log.error(f"vfu_kvssd did not create socket {socket}; see {log_path}")
         return err
 
+    # Upstream QEMU's vfio-user-pci takes 'socket' as a SocketAddress object,
+    # not a path string, so it must be given in JSON form. cijoe runs the qemu
+    # command via a shell, so wrap the (space-free) JSON in single quotes to
+    # preserve the inner double quotes.
+    vfio_dev = (
+        '{"driver":"vfio-user-pci",'
+        '"socket":{"type":"unix","path":"' + socket + '"}}'
+    )
     extra_args = [
         # q35 for PCIe; memory-backend wires guest RAM to the shareable memfd.
         "-machine",
@@ -77,7 +85,7 @@ def main(args, cijoe):
         "-object",
         f"memory-backend-memfd,id=pcram,size={memory},share=on",
         "-device",
-        f"vfio-user-pci,socket={socket}",
+        "'" + vfio_dev + "'",
     ]
 
     # Optional cloud-init NoCloud seed (label cidata) to enable SSH on first
