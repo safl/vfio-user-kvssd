@@ -2,10 +2,10 @@ doc: |
   vfu_kvssd provisioning
   ======================
 
-  Build the device, boot a guest attached to it over vfio-user, and build
-  xNVMe inside the guest. Leaves the guest + device running for the 'test'
-  task -- there is no teardown: the CI container is ephemeral and discarded
-  when the job ends.
+  Build the device, boot a guest attached to it over vfio-user, build xNVMe in
+  the guest, then env-check the device: enumeration (lspci) and a driver
+  attach/detach cycle (xnvme-driver). Leaves the guest + device running for the
+  'test' task -- no teardown: the CI container is ephemeral.
 
   Runs in the nosi ubuntu-2604-docker image (QEMU 10.2 + cijoe). The guest's
   boot.img + cloud-init seed are staged by the workflow.
@@ -37,30 +37,52 @@ steps:
     # ~120s nested-KVM boot; 600s is a comfortable ceiling.
     timeout: 600
 
-- name: verify_device
-  # Quick verification that the vfio-user device enumerated, before the heavier
-  # xNVMe build. The emulated controller is vendor 1d1d:1f1f (NVMe class).
+- name: build_xnvme
   uses: core.cmdrunner
   with:
     transport: ssh
     commands:
     - "cloud-init status --wait || true"
     - "uname -a"
-    - "apt-get update && apt-get install -y --no-install-recommends pciutils nvme-cli git"
-    - "lspci -nn"
-    - "lspci -d 1d1d:1f1f -nn | grep -qi . || { echo 'ERROR: vfu_kvssd not on PCI bus'; exit 1; }"
-    # KV namespace shows up as a generic char device (not a block device).
-    - "ls -l /dev/ng* /dev/nvme* 2>&1 || true"
-    - "nvme list || true"
-
-- name: build_xnvme
-  uses: core.cmdrunner
-  with:
-    transport: ssh
-    commands:
+    - "apt-get update && apt-get install -y --no-install-recommends git pciutils nvme-cli"
     - "git clone --recursive --depth 1 https://github.com/xnvme/xnvme.git"
     # xNVMe's own dependency script (installs build deps + libvfn).
     - "cd xnvme && ./toolbox/pkgs/debian-trixie.sh"
     # Slim build (kernel /dev/ng ioctl backend only: no SPDK/liburing/libvfn/
-    # libaio/isal). 'clean' ensures a fresh builddir for 'config-slim'.
+    # libaio/isal). 'clean' ensures a fresh builddir for 'config-slim'. Note:
+    # this still installs the 'xnvme-driver' devbind helper.
     - "cd xnvme && make clean config-slim build install && ldconfig"
+
+- name: env_check
+  # Verify the emulated controller (vendor 1d1d:1f1f, NVMe class) enumerated,
+  # then exercise a driver attach/detach cycle with nosi's 'devbind' tool:
+  # detach binds it to uio_pci_generic (no IOMMU needed) so /dev/ng0n1
+  # disappears; re-bind to nvme brings it back -- confirming the device
+  # survives controller disable/re-enable.
+  uses: core.cmdrunner
+  with:
+    transport: ssh
+    commands:
+    - "lspci -nn"
+    - "lspci -d 1d1d:1f1f -nn | grep -qi . || { echo 'ERROR: vfu_kvssd not on PCI bus'; exit 1; }"
+    - "nvme list || true"
+    - "ls -l /dev/ng0n1"
+    # devbind / hugepages / iommu are pip tools (PyPI); install a shim on PATH.
+    - "PIPX_BIN_DIR=/usr/local/bin pipx install devbind"
+    - "devbind --list"
+    - |
+      set -eu
+      bdf=$(lspci -d 1d1d:1f1f -D | awk '{print $1}')
+      echo "device: $bdf"
+      modprobe uio_pci_generic || true
+      echo "## detach: bind $bdf -> uio_pci_generic"
+      devbind --bind uio_pci_generic --device "$bdf"
+      for i in $(seq 1 30); do [ -e /dev/ng0n1 ] || break; sleep 0.5; done
+      if [ -e /dev/ng0n1 ]; then echo "ERROR: still attached after detach"; exit 1; fi
+      echo "OK detached: /dev/ng0n1 gone"
+      echo "## re-attach: bind $bdf -> nvme"
+      devbind --bind nvme --device "$bdf"
+      for i in $(seq 1 30); do [ -e /dev/ng0n1 ] && break; sleep 0.5; done
+      if [ ! -e /dev/ng0n1 ]; then echo "ERROR: did not re-attach"; exit 1; fi
+      echo "OK re-attached: /dev/ng0n1 back"
+      devbind --list
