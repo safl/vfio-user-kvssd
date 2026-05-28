@@ -1,5 +1,10 @@
 const std = @import("std");
 
+// build.zig.zon is the single source of truth for the version. The release
+// workflow overrides it with the git tag via -Dversion; local/CI builds fall
+// back to this so the two cannot silently drift.
+const zon = @import("build.zig.zon");
+
 const vfu = "subprojects/libvfio-user";
 const jsonc = "subprojects/json-c";
 const jsonc_cfg = "third_party/json-c-config";
@@ -79,7 +84,7 @@ pub fn build(b: *std.Build) void {
     const want_static = b.option(bool, "static",
         "Link statically (use with -Dtarget=x86_64-linux-musl)") orelse false;
     const version = b.option([]const u8, "version",
-        "Version string reported by --version") orelse "0.1.0-dev";
+        "Version string reported by --version") orelse zon.version;
 
     // The kvssd device. Strip in release builds (zig strips cross-arch).
     const kvssd_mod = b.createModule(.{
