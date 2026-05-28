@@ -6,6 +6,14 @@ name: qemu-kvssd
 # opt-in rather than part of the per-push CI.
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - cijoe/**
+      - src/**
+      - include/**
+      - build.zig
+      - .github/workflows/qemu-kvssd.yml
   pull_request:
     branches: [main]
     paths:
