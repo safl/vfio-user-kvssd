@@ -30,13 +30,13 @@
 #define NVME_MSIX_BAR_SIZE 4096
 
 struct nvme_cq {
-	uint64_t dma;	/* guest physical base address */
-	uint32_t size;	/* number of entries */
+	uint64_t dma;  /* guest physical base address */
+	uint32_t size; /* number of entries */
 	uint16_t qid;
-	uint16_t head;	/* updated by the CQ head doorbell */
-	uint16_t tail;	/* next slot the controller will write */
-	uint8_t phase;	/* phase tag the controller writes */
-	int irq;	/* interrupt vector, -1 if none */
+	uint16_t head; /* updated by the CQ head doorbell */
+	uint16_t tail; /* next slot the controller will write */
+	uint8_t phase; /* phase tag the controller writes */
+	int irq;       /* interrupt vector, -1 if none */
 	bool enabled;
 };
 
@@ -45,8 +45,8 @@ struct nvme_sq {
 	uint32_t size;
 	uint16_t qid;
 	uint16_t cqid;
-	uint16_t head;	/* next SQE the controller will fetch */
-	uint16_t tail;	/* updated by the SQ tail doorbell */
+	uint16_t head; /* next SQE the controller will fetch */
+	uint16_t tail; /* updated by the SQ tail doorbell */
 	bool enabled;
 };
 
@@ -74,26 +74,29 @@ struct nvme_ctrl {
 	struct kv_ns ns;
 };
 
-int nvme_ctrl_init(struct nvme_ctrl *n, vfu_ctx_t *vfu);
-void nvme_ctrl_teardown(struct nvme_ctrl *n);
+int
+nvme_ctrl_init(struct nvme_ctrl *n, vfu_ctx_t *vfu);
+void
+nvme_ctrl_teardown(struct nvme_ctrl *n);
 
 /* BAR0 access callback (matches vfu_region_access_cb_t). */
-ssize_t nvme_bar0_access(vfu_ctx_t *vfu, char *buf, size_t count, loff_t offset,
-			 bool is_write);
+ssize_t
+nvme_bar0_access(vfu_ctx_t *vfu, char *buf, size_t count, loff_t offset, bool is_write);
 
 /* MSI-X table/PBA (BAR4) access callback. */
-ssize_t nvme_msix_access(vfu_ctx_t *vfu, char *buf, size_t count, loff_t offset,
-			 bool is_write);
+ssize_t
+nvme_msix_access(vfu_ctx_t *vfu, char *buf, size_t count, loff_t offset, bool is_write);
 
 /*
  * Move 'len' bytes between a host buffer described by prp1/prp2 and a local
  * buffer. 'to_host' selects controller-to-host (write) vs host-to-controller
  * (read). Returns 0 on success, -1 on failure.
  */
-int nvme_prp_xfer(vfu_ctx_t *vfu, uint64_t prp1, uint64_t prp2, void *buf,
-		  size_t len, bool to_host);
+int
+nvme_prp_xfer(vfu_ctx_t *vfu, uint64_t prp1, uint64_t prp2, void *buf, size_t len, bool to_host);
 
 /* Dispatch a KV I/O command to the ported handlers. Returns an NVMe status. */
-uint16_t nvme_io_kv(struct nvme_ctrl *n, const NvmeSqe *sqe);
+uint16_t
+nvme_io_kv(struct nvme_ctrl *n, const NvmeSqe *sqe);
 
 #endif /* KVSSD_NVME_H */

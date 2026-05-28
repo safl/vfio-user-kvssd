@@ -40,14 +40,21 @@ struct kv_dma {
 	void *ctx;
 };
 
-int kv_ns_init(struct kv_ns *ns);
-void kv_ns_teardown(struct kv_ns *ns);
+int
+kv_ns_init(struct kv_ns *ns);
+void
+kv_ns_teardown(struct kv_ns *ns);
 
 /* Each handler returns an NVMe status code (without DNR/phase). */
-uint16_t kv_store(struct kv_ns *ns, const NvmeKVCmd *cmd, struct kv_dma *dma);
-uint16_t kv_retrieve(struct kv_ns *ns, const NvmeKVCmd *cmd, struct kv_dma *dma);
-uint16_t kv_delete(struct kv_ns *ns, const NvmeKVCmd *cmd, struct kv_dma *dma);
-uint16_t kv_exist(struct kv_ns *ns, const NvmeKVCmd *cmd, struct kv_dma *dma);
-uint16_t kv_list(struct kv_ns *ns, const NvmeKVCmd *cmd, struct kv_dma *dma);
+uint16_t
+kv_store(struct kv_ns *ns, const NvmeKVCmd *cmd, struct kv_dma *dma);
+uint16_t
+kv_retrieve(struct kv_ns *ns, const NvmeKVCmd *cmd, struct kv_dma *dma);
+uint16_t
+kv_delete(struct kv_ns *ns, const NvmeKVCmd *cmd, struct kv_dma *dma);
+uint16_t
+kv_exist(struct kv_ns *ns, const NvmeKVCmd *cmd, struct kv_dma *dma);
+uint16_t
+kv_list(struct kv_ns *ns, const NvmeKVCmd *cmd, struct kv_dma *dma);
 
 #endif /* KVSSD_KV_H */

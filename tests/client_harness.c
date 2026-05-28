@@ -88,8 +88,7 @@ negotiate(int sock)
 	iov[2].iov_base = caps;
 	iov[2].iov_len = slen + 1;
 
-	if (tran_sock_send_iovec(sock, 1, false, VFIO_USER_VERSION, iov, 3, NULL, 0, 0) <
-	    0) {
+	if (tran_sock_send_iovec(sock, 1, false, VFIO_USER_VERSION, iov, 3, NULL, 0, 0) < 0) {
 		err(EXIT_FAILURE, "send version");
 	}
 	if (tran_sock_recv_alloc(sock, &hdr, true, NULL, (void **)&sv, &vlen) < 0) {
@@ -112,8 +111,8 @@ map_dma(int sock, int fd)
 
 	iov[1].iov_base = &m;
 	iov[1].iov_len = sizeof(m);
-	if (tran_sock_msg_iovec(sock, 2, VFIO_USER_DMA_MAP, iov, 2, &fd, 1, NULL, NULL, 0,
-				NULL, 0) < 0) {
+	if (tran_sock_msg_iovec(sock, 2, VFIO_USER_DMA_MAP, iov, 2, &fd, 1, NULL, NULL, 0, NULL,
+				0) < 0) {
 		err(EXIT_FAILURE, "DMA_MAP");
 	}
 }
@@ -148,8 +147,8 @@ access_region(int sock, int region, bool is_write, uint64_t offset, void *data, 
 	if (!resp) {
 		err(EXIT_FAILURE, "calloc");
 	}
-	ret = tran_sock_msg_iovec(sock, msg_id--, op, iov, nr_iov, NULL, 0, NULL, resp,
-				  resp_len, NULL, 0);
+	ret = tran_sock_msg_iovec(sock, msg_id--, op, iov, nr_iov, NULL, 0, NULL, resp, resp_len,
+				  NULL, 0);
 	if (ret != 0) {
 		free(resp);
 		return ret;
@@ -187,7 +186,8 @@ reg_wr64(int sock, uint64_t off, uint64_t v)
 	}
 }
 
-static void check_cqe(const NvmeCqe *cqe, uint16_t expect_cid, const char *what);
+static void
+check_cqe(const NvmeCqe *cqe, uint16_t expect_cid, const char *what);
 
 /* Walk the PCI capability list and verify the MSI-X capability is present. */
 static void
@@ -196,8 +196,7 @@ check_msix_cap(int sock)
 	uint8_t cfg[256];
 	uint8_t pos;
 
-	if (access_region(sock, VFU_PCI_DEV_CFG_REGION_IDX, false, 0, cfg, sizeof(cfg)) !=
-	    0) {
+	if (access_region(sock, VFU_PCI_DEV_CFG_REGION_IDX, false, 0, cfg, sizeof(cfg)) != 0) {
 		errx(EXIT_FAILURE, "read PCI config space");
 	}
 	pos = cfg[0x34]; /* capabilities pointer */
@@ -205,8 +204,7 @@ check_msix_cap(int sock)
 		uint8_t id = cfg[pos];
 		if (id == PCI_CAP_ID_MSIX) {
 			uint16_t mc = (uint16_t)(cfg[pos + 2] | (cfg[pos + 3] << 8));
-			printf("  ok: MSI-X capability (table size %u)\n",
-			       (mc & 0x7ff) + 1);
+			printf("  ok: MSI-X capability (table size %u)\n", (mc & 0x7ff) + 1);
 			return;
 		}
 		pos = cfg[pos + 1];
@@ -216,8 +214,8 @@ check_msix_cap(int sock)
 
 /* Submit a single Identify on the admin queue and validate completion. */
 static void
-admin_identify(int sock, NvmeSqe *asq, NvmeCqe *acq, uint16_t slot, uint16_t cid,
-	       uint32_t cns, const char *what)
+admin_identify(int sock, NvmeSqe *asq, NvmeCqe *acq, uint16_t slot, uint16_t cid, uint32_t cns,
+	       const char *what)
 {
 	memset(&asq[slot], 0, sizeof(asq[slot]));
 	asq[slot].opcode = 0x06;
@@ -275,9 +273,9 @@ main(int argc, char **argv)
 
 	/* Enable the controller. */
 	reg_wr32(sock, 0x24, (uint32_t)((Q_DEPTH - 1) | ((Q_DEPTH - 1) << 16))); /* AQA */
-	reg_wr64(sock, 0x28, ASQ_IOVA);                                         /* ASQ */
-	reg_wr64(sock, 0x30, ACQ_IOVA);                                         /* ACQ */
-	reg_wr32(sock, 0x14, (4u << 20) | (6u << 16) | 1u);                     /* CC.EN */
+	reg_wr64(sock, 0x28, ASQ_IOVA);                                          /* ASQ */
+	reg_wr64(sock, 0x30, ACQ_IOVA);                                          /* ACQ */
+	reg_wr32(sock, 0x14, (4u << 20) | (6u << 16) | 1u);                      /* CC.EN */
 	if (!(reg_rd32(sock, 0x1c) & 1u)) {
 		errx(EXIT_FAILURE, "controller did not become ready (CSTS.RDY)");
 	}

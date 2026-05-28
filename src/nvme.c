@@ -150,8 +150,7 @@ out:
 }
 
 int
-nvme_prp_xfer(vfu_ctx_t *vfu, uint64_t prp1, uint64_t prp2, void *buf, size_t len,
-	      bool to_host)
+nvme_prp_xfer(vfu_ctx_t *vfu, uint64_t prp1, uint64_t prp2, void *buf, size_t len, bool to_host)
 {
 	const size_t ps = KVSSD_PAGE_SIZE;
 	const size_t max_sg = 16;
@@ -204,8 +203,8 @@ out:
 /* -------------------------------------------------------------------------- */
 
 static void
-nvme_post_cqe(struct nvme_ctrl *n, uint16_t cqid, uint16_t sqid, uint16_t sq_head,
-	      uint16_t cid, uint32_t cdw0, uint16_t status)
+nvme_post_cqe(struct nvme_ctrl *n, uint16_t cqid, uint16_t sqid, uint16_t sq_head, uint16_t cid,
+	      uint32_t cdw0, uint16_t status)
 {
 	struct nvme_cq *cq = &n->cq[cqid];
 	NvmeCqe cqe;
@@ -221,8 +220,8 @@ nvme_post_cqe(struct nvme_ctrl *n, uint16_t cqid, uint16_t sqid, uint16_t sq_hea
 	cqe.cid = cid;
 	cqe.status = (uint16_t)((status << 1) | (cq->phase & 1));
 
-	nvme_gpa_xfer(n->vfu, cq->dma + (uint64_t)cq->tail * sizeof(NvmeCqe), &cqe,
-		      sizeof(cqe), true);
+	nvme_gpa_xfer(n->vfu, cq->dma + (uint64_t)cq->tail * sizeof(NvmeCqe), &cqe, sizeof(cqe),
+		      true);
 
 	cq->tail++;
 	if (cq->tail == cq->size) {
@@ -524,8 +523,8 @@ nvme_process_sq(struct nvme_ctrl *n, uint16_t qid)
 		uint32_t cdw0 = 0;
 		uint16_t status;
 
-		if (nvme_gpa_xfer(n->vfu, sq->dma + (uint64_t)sq->head * sizeof(NvmeSqe),
-				  &sqe, sizeof(sqe), false)) {
+		if (nvme_gpa_xfer(n->vfu, sq->dma + (uint64_t)sq->head * sizeof(NvmeSqe), &sqe,
+				  sizeof(sqe), false)) {
 			return; /* DMA failure; cannot make progress */
 		}
 		sq->head = (uint16_t)((sq->head + 1) % sq->size);

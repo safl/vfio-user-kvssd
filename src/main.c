@@ -77,10 +77,10 @@ main(int argc, char **argv)
 	int opt, ret;
 
 	static const struct option long_opts[] = {
-		{ "socket",  required_argument, NULL, 's' },
-		{ "help",    no_argument,       NULL, 'h' },
-		{ "version", no_argument,       NULL, 'V' },
-		{ 0, 0, 0, 0 },
+		{"socket", required_argument, NULL, 's'},
+		{"help", no_argument, NULL, 'h'},
+		{"version", no_argument, NULL, 'V'},
+		{0, 0, 0, 0},
 	};
 
 	while ((opt = getopt_long(argc, argv, "s:hV", long_opts, NULL)) != -1) {
@@ -125,17 +125,16 @@ main(int argc, char **argv)
 	cfg[0x0a] = 0x08; /* subclass: NVM */
 	cfg[0x0b] = 0x01; /* class: mass storage */
 
-	if (vfu_setup_region(vfu, VFU_PCI_DEV_BAR0_REGION_IDX, NVME_BAR0_SIZE,
-			     nvme_bar0_access, VFU_REGION_FLAG_RW | VFU_REGION_FLAG_MEM,
-			     NULL, 0, -1, 0) < 0) {
+	if (vfu_setup_region(vfu, VFU_PCI_DEV_BAR0_REGION_IDX, NVME_BAR0_SIZE, nvme_bar0_access,
+			     VFU_REGION_FLAG_RW | VFU_REGION_FLAG_MEM, NULL, 0, -1, 0) < 0) {
 		perror("vfu_setup_region BAR0");
 		goto err;
 	}
 
 	/* BAR4 holds the MSI-X table + PBA. */
 	if (vfu_setup_region(vfu, VFU_PCI_DEV_BAR4_REGION_IDX, NVME_MSIX_BAR_SIZE,
-			     nvme_msix_access, VFU_REGION_FLAG_RW | VFU_REGION_FLAG_MEM,
-			     NULL, 0, -1, 0) < 0) {
+			     nvme_msix_access, VFU_REGION_FLAG_RW | VFU_REGION_FLAG_MEM, NULL, 0,
+			     -1, 0) < 0) {
 		perror("vfu_setup_region BAR4");
 		goto err;
 	}
@@ -155,8 +154,8 @@ main(int argc, char **argv)
 		goto err;
 	}
 
-	if (vfu_setup_device_dma(vfu, LIBVFIO_USER_MAX_DMA_REGIONS, dma_register,
-				 dma_unregister) < 0) {
+	if (vfu_setup_device_dma(vfu, LIBVFIO_USER_MAX_DMA_REGIONS, dma_register, dma_unregister) <
+	    0) {
 		perror("vfu_setup_device_dma");
 		goto err;
 	}
