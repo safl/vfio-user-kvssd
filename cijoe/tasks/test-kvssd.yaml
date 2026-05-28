@@ -84,18 +84,12 @@ steps:
     - "xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1"
     - "xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1 --key tango --value charlie"
 
-- name: poweroff_guest
-  uses: core.cmdrunner
-  with:
-    transport: ssh
-    commands:
-    - "systemctl poweroff -i || poweroff -f || true"
-
-- name: wait_for_termination
-  uses: qemu.guest_wait_for_termination
+- name: kill_guest
+  # Tear down by killing the QEMU process from the host. 'poweroff' over SSH
+  # severs the connection mid-command and cijoe reports it as a failure.
+  uses: qemu.guest_kill
   with:
     guest_name: kvssd_amd64
-    timeout: 60
 
 - name: stop_device
   uses: core.cmdrunner
