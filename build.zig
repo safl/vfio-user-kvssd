@@ -79,11 +79,12 @@ pub fn build(b: *std.Build) void {
     const want_static = b.option(bool, "static",
         "Link statically (use with -Dtarget=x86_64-linux-musl)") orelse false;
 
-    // The kvssd device.
+    // The kvssd device. Strip in release builds (zig strips cross-arch).
     const kvssd_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
         .link_libc = true,
+        .strip = optimize != .Debug,
     });
     kvssd_mod.addIncludePath(b.path("include"));
     kvssd_mod.addIncludePath(b.path("src"));
