@@ -47,39 +47,47 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Environment check (QEMU, cijoe, KVM)
+      - name: Verify environment
+        # The nosi ubuntu-2604-docker image is expected to provide the full
+        # host toolchain (QEMU >= 10.1 with vfio-user, cijoe, zig) plus the
+        # image-staging tools. Assert that here rather than installing anything:
+        # a missing tool means the image needs fixing, not the CI.
         run: |
-          qemu-system-x86_64 --version | head -1
-          cijoe --version
-          ls -l /dev/kvm
-          # Hard gate: the whole point is the vfio-user client. Fail early and
-          # clearly if this QEMU build does not have it.
-          if ! qemu-system-x86_64 -device help 2>/dev/null | grep -qi 'vfio-user-pci'; then
-            echo "::error::qemu-system-x86_64 has no vfio-user-pci device (need QEMU >= 10.1)"
-            exit 1
-          fi
-
-      - name: Install missing tooling
-        # The nosi image ships qemu + cijoe (+ likely zig); only fill gaps so
-        # we use what the image provides and stay fast.
-        run: |
-          need() { command -v "$1" >/dev/null 2>&1; }
-          if ! need cloud-localds || ! need qemu-img || ! need curl; then
-            apt-get update
-            apt-get install -y --no-install-recommends \
-              cloud-image-utils qemu-utils genisoimage curl xz-utils file
-          fi
-
-      - name: Install Zig (only if the image lacks it)
-        run: |
+          fail=0
+          check() {
+            if command -v "$1" >/dev/null 2>&1; then
+              echo "ok: $1 -> $(command -v "$1")"
+            else
+              echo "::error::missing required tool: $1"; fail=1
+            fi
+          }
+          check qemu-system-x86_64
+          check qemu-img
+          check cijoe
+          check zig
+          check git
+          check curl
+          check cloud-localds
+          qemu-system-x86_64 --version | head -1 || true
+          cijoe --version || true
+          zig version || true
+          # build.zig uses the 0.15+/0.16 module API (createModule/root_module),
+          # so the image's zig must be the matching series, not just present.
           if command -v zig >/dev/null 2>&1; then
-            echo "using image zig: $(zig version)"
-          else
-            curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz
-            mkdir -p /opt/zig
-            tar -C /opt/zig --strip-components=1 -xf /tmp/zig.tar.xz
-            echo "/opt/zig" >> "$GITHUB_PATH"
+            zv="$(zig version 2>/dev/null)"
+            case "$zv" in
+              ${ZIG_VERSION%.*}.*) echo "ok: zig $zv" ;;
+              *) echo "::error::zig $zv incompatible; build.zig needs ${ZIG_VERSION%.*}.x (image must ship it)"; fail=1 ;;
+            esac
           fi
+          if ! qemu-system-x86_64 -device help 2>/dev/null | grep -qi 'vfio-user-pci'; then
+            echo "::error::qemu has no vfio-user-pci device (need QEMU >= 10.1)"; fail=1
+          fi
+          if [ ! -e /dev/kvm ]; then
+            echo "::error::/dev/kvm not available (need --privileged + host KVM)"; fail=1
+          fi
+          ls -l /dev/kvm 2>/dev/null || true
+          exit "$fail"
 
       - name: Stage guest boot.img + cloud-init seed (root SSH)
         run: |
