@@ -129,8 +129,13 @@ jobs:
           printf 'instance-id: kvssd\nlocal-hostname: kvssd\n' > /tmp/meta-data
           cloud-localds "$HOME/guests/kvssd-amd64/seed.iso" "$ud" /tmp/meta-data
 
-      - name: Run cijoe bring-up
-        run: cd cijoe && cijoe tasks/test-kvssd.yaml --monitor -c configs/qemu-kvssd.toml
+      - name: Provision guest + device
+        run: cd cijoe && cijoe tasks/provision.yaml --monitor -c configs/qemu-kvssd.toml -o cijoe-output/provision
+
+      - name: Run KV tests
+        # The provision step left the guest + device running; no teardown -- the
+        # container is discarded when the job ends.
+        run: cd cijoe && cijoe tasks/test.yaml --monitor -c configs/qemu-kvssd.toml -o cijoe-output/test
 
       - name: Upload cijoe report
         if: always()

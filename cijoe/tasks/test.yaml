@@ -1,0 +1,22 @@
+doc: |
+  vfu_kvssd KV tests
+  ==================
+
+  Run xNVMe's KV I/O tests against the emulated KV namespace (/dev/ng0n1) in
+  the guest that the 'provision' task left running. Re-runnable on its own
+  without re-provisioning.
+
+steps:
+- name: kv_test
+  uses: core.cmdrunner
+  with:
+    transport: ssh
+    commands:
+    # Enumerate + identify the KV namespace, then run xNVMe's own KV I/O tests
+    # (same invocations as xNVMe's cijoe suite) against /dev/ng0n1.
+    - "kvs enum"
+    - "kvs idfy-ns /dev/ng0n1 --nsid 1"
+    - "xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1"
+    - "xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1 --key tango --value charlie"
+    # Show the device is still present after the tests.
+    - "lspci -nn"

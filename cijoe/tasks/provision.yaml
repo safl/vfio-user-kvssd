@@ -1,23 +1,14 @@
 doc: |
-  vfu_kvssd end-to-end bring-up under QEMU
-  ========================================
+  vfu_kvssd provisioning
+  ======================
 
-  Validates the vfio-user KV SSD against a real guest kernel + xNVMe, the part
-  the local client harness cannot cover.
+  Build the device, boot a guest attached to it over vfio-user, and build
+  xNVMe inside the guest. Leaves the guest + device running for the 'test'
+  task -- there is no teardown: the CI container is ephemeral and discarded
+  when the job ends.
 
   Runs in the nosi ubuntu-2604-docker image (QEMU 10.2 + cijoe). The guest's
-  boot.img + cloud-init seed are staged by the workflow, so there is no QEMU
-  build and no guest_initialize step here.
-
-  1. Build the static vfu_kvssd device (host, zig).
-  2. Start vfu_kvssd, then boot the guest with a shareable memfd backend and
-     ``-device vfio-user-pci`` attached to the device's socket.
-  3. Wait for guest SSH; verify the device enumerated on the PCI bus (lspci).
-  4. Install deps (xNVMe's debian-trixie.sh) + build xNVMe slim (kernel backend).
-  5. Run the xNVMe KV tests against the emulated KV namespace (/dev/ng0n1).
-  6. Power off, wait for QEMU to exit, stop the device.
-
-  Requires KVM and QEMU >= 10.1; intended for GHA via .github/workflows/qemu-kvssd.yml.
+  boot.img + cloud-init seed are staged by the workflow.
 
 steps:
 - name: build_kvssd
@@ -30,7 +21,9 @@ steps:
 
 - name: start
   # Starts the vfu_kvssd server and boots the guest (boot.img staged by the
-  # workflow) with the vfio-user device + shareable memfd backend.
+  # workflow) with the vfio-user device + shareable memfd backend. Both the
+  # device (setsid) and the guest (-daemonize) outlive this cijoe invocation,
+  # so the 'test' task can connect to them.
   uses: vfu_kvssd_start
   with:
     guest_name: kvssd_amd64
@@ -71,29 +64,3 @@ steps:
     # Slim build (kernel /dev/ng ioctl backend only: no SPDK/liburing/libvfn/
     # libaio/isal). 'clean' ensures a fresh builddir for 'config-slim'.
     - "cd xnvme && make clean config-slim build install && ldconfig"
-
-- name: kv_test
-  uses: core.cmdrunner
-  with:
-    transport: ssh
-    commands:
-    # Enumerate + identify the KV namespace, then run xNVMe's own KV I/O tests
-    # (same invocations as xNVMe's cijoe suite) against /dev/ng0n1.
-    - "kvs enum"
-    - "kvs idfy-ns /dev/ng0n1 --nsid 1"
-    - "xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1"
-    - "xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1 --key tango --value charlie"
-
-- name: kill_guest
-  # Tear down by killing the QEMU process from the host. 'poweroff' over SSH
-  # severs the connection mid-command and cijoe reports it as a failure.
-  uses: qemu.guest_kill
-  with:
-    guest_name: kvssd_amd64
-
-- name: stop_device
-  uses: core.cmdrunner
-  with:
-    transport: initiator
-    commands:
-    - "pkill -f 'vfu_kvssd -s' || true"
