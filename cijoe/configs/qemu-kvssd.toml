@@ -41,6 +41,14 @@ system_args.kwa = {cpu = "host", smp = 4, accel = "kvm"}
 # Forward guest :22 to host :4200 for the SSH transport above.
 system_args.tcp_forward = {host = 4200, guest = 22}
 
+# Guest disk: nosi ubuntu-2604-headless (qemu+cijoe+devbind/iommu/hugepages
+# preinstalled), an oras disk-image artifact pinned to the resolved blob digest
+# for reproducibility. The workflow fetches + gunzips it to the guest boot.img.
+[guest_image]
+registry = "ghcr.io"
+repository = "safl/nosi/ubuntu-2604-headless"
+digest = "sha256:919e85401b034921ebcea8e167e1fe744929ffd9a7aedf6b3ba60694bba2723d"
+
 # The device under test. cijoe runs from the cijoe/ dir, so 'binary' is given
 # relative to that (one level up to the repo root, where zig emits it).
 [kvssd]
