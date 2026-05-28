@@ -47,6 +47,16 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install Zig ${{ env.ZIG_VERSION }}
+        # TEMPORARY: the nosi image currently ships zig 0.13, but build.zig
+        # needs the 0.16 module API. Install 0.16 and prepend it to PATH so it
+        # overrides the image's zig. Remove once nosi ships zig 0.16.
+        run: |
+          curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz
+          mkdir -p /opt/zig
+          tar -C /opt/zig --strip-components=1 -xf /tmp/zig.tar.xz
+          echo "/opt/zig" >> "$GITHUB_PATH"
+
       - name: Verify environment
         # The nosi ubuntu-2604-docker image is expected to provide the full
         # host toolchain (QEMU >= 10.1 with vfio-user, cijoe, zig) plus the
