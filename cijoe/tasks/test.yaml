@@ -2,9 +2,13 @@ doc: |
   vfu_kvssd KV tests
   ==================
 
-  Run xNVMe's KV I/O tests against the emulated KV namespace (/dev/ng0n1) in
-  the guest that the 'provision' task left running. Re-runnable on its own
-  without re-provisioning.
+  Run xNVMe's KV I/O test against the emulated KV namespace via three access
+  paths, in the guest the 'provision' task left running. Re-runnable on its own.
+
+  1. kernel ioctl   -- /dev/ng0n1 (default sync/admin=nvme)
+  2. io_uring_cmd   -- async kernel passthru (--be io_uring_cmd)
+  3. upcie          -- userspace driver (--be upcie): device bound to
+                       uio_pci_generic, hugepages reserved
 
 steps:
 - name: kv_test
@@ -12,11 +16,21 @@ steps:
   with:
     transport: ssh
     commands:
-    # Enumerate + identify the KV namespace, then run xNVMe's own KV I/O tests
-    # (same invocations as xNVMe's cijoe suite) against /dev/ng0n1.
     - "kvs enum"
     - "kvs idfy-ns /dev/ng0n1 --nsid 1"
+    # 1. kernel ioctl
     - "xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1"
-    - "xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1 --key tango --value charlie"
-    # Show the device is still present after the tests.
+    # 2. io_uring_cmd (async kernel passthru; needs liburing)
+    - "xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1 --be io_uring_cmd"
+    # 3. upcie userspace backend: reserve hugepages, bind the controller to
+    #    uio_pci_generic, run on the PCIe BDF, then restore the kernel driver.
+    - |
+      set -eu
+      bdf=$(lspci -d 1d1d:1f1f -D | awk '{print $1}')
+      echo "device: $bdf"
+      sysctl -w vm.nr_hugepages=512
+      modprobe uio_pci_generic || true
+      trap 'devbind --bind nvme --device "$bdf" || true' EXIT
+      devbind --bind uio_pci_generic --device "$bdf"
+      xnvme_tests_kvs kvs_io "$bdf" --dev-nsid 1 --be upcie
     - "lspci -nn"

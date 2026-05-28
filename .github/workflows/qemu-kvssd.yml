@@ -27,7 +27,6 @@ on:
 
 env:
   ZIG_VERSION: "0.16.0"
-  DEBIAN_CLOUD_URL: "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2"
 
 jobs:
   bringup:
@@ -107,14 +106,27 @@ jobs:
           ls -l /dev/kvm 2>/dev/null || true
           exit "$fail"
 
-      - name: Stage guest boot.img + cloud-init seed (root SSH)
+      - name: Stage guest boot.img (nosi headless) + cloud-init seed (root SSH)
         run: |
+          set -eu
           mkdir -p "$HOME/guests/kvssd-amd64"
           boot="$HOME/guests/kvssd-amd64/boot.img"
-          curl -fsSL "$DEBIAN_CLOUD_URL" -o "$boot"
-          # Room for apt + an in-guest xNVMe build; cloud-init growpart grows
-          # the rootfs to fill the resized disk on first boot.
-          qemu-img resize "$boot" +12G
+          cfg=cijoe/configs/qemu-kvssd.toml
+          repo=$(python3 -c 'import tomllib,sys;print(tomllib.load(open(sys.argv[1],"rb"))["guest_image"]["repository"])' "$cfg")
+          digest=$(python3 -c 'import tomllib,sys;print(tomllib.load(open(sys.argv[1],"rb"))["guest_image"]["digest"])' "$cfg")
+          # Pull the pinned oras disk-image blob (anonymous ghcr token), decompress,
+          # and convert raw -> qcow2 (the cijoe wrapper opens boot.img as qcow2).
+          tok=$(curl -fsSL "https://ghcr.io/token?scope=repository:${repo}:pull" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+          echo "fetching ${repo}@${digest}"
+          curl -fsSL -H "Authorization: Bearer ${tok}" "https://ghcr.io/v2/${repo}/blobs/${digest}" -o /tmp/nosi.img.gz
+          gunzip -f /tmp/nosi.img.gz
+          qemu-img convert -f raw -O qcow2 /tmp/nosi.img "$boot"
+          rm -f /tmp/nosi.img
+          # Room for the in-guest xNVMe build; cloud-init growpart grows the rootfs.
+          qemu-img resize "$boot" +8G
+          qemu-img info "$boot" | head -4
+          # cloud-init NoCloud seed: nosi images re-run cloud-init on first boot,
+          # so this enables root SSH for the cijoe transport.
           ud=/tmp/user-data
           echo '#cloud-config'       >  "$ud"
           echo 'ssh_pwauth: true'    >> "$ud"

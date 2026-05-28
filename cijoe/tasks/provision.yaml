@@ -2,13 +2,15 @@ doc: |
   vfu_kvssd provisioning
   ======================
 
-  Build the device, boot a guest attached to it over vfio-user, build xNVMe in
-  the guest, then env-check the device: enumeration (lspci) and a driver
-  attach/detach cycle (xnvme-driver). Leaves the guest + device running for the
-  'test' task -- no teardown: the CI container is ephemeral.
+  Build the device, boot the nosi ubuntu-2604 guest attached to it over
+  vfio-user, build xNVMe in the guest, then env-check the device: enumeration
+  (lspci) and a driver attach/detach cycle (devbind). Leaves the guest +
+  device running for the 'test' task -- no teardown: the CI container is
+  ephemeral.
 
   Runs in the nosi ubuntu-2604-docker image (QEMU 10.2 + cijoe). The guest's
-  boot.img + cloud-init seed are staged by the workflow.
+  boot.img + cloud-init seed are staged by the workflow. The guest is a nosi
+  image too, so devbind / iommu / hugepages are preinstalled.
 
 steps:
 - name: build_kvssd
@@ -20,10 +22,9 @@ steps:
     - "cd .. && zig build -Dtarget=x86_64-linux-musl -Dstatic=true -Doptimize=ReleaseSafe && file zig-out/bin/vfu_kvssd"
 
 - name: start
-  # Starts the vfu_kvssd server and boots the guest (boot.img staged by the
-  # workflow) with the vfio-user device + shareable memfd backend. Both the
-  # device (setsid) and the guest (-daemonize) outlive this cijoe invocation,
-  # so the 'test' task can connect to them.
+  # Starts the vfu_kvssd server and boots the guest with the vfio-user device
+  # + shareable memfd backend. Both the device (setsid) and the guest
+  # (-daemonize) outlive this cijoe invocation, so 'test' can connect to them.
   uses: vfu_kvssd_start
   with:
     guest_name: kvssd_amd64
@@ -33,8 +34,6 @@ steps:
   with:
     state: up
     transport_name: ssh
-    # First boot runs cloud-init (host-key gen, SSH enable) on top of the
-    # ~120s nested-KVM boot; 600s is a comfortable ceiling.
     timeout: 600
 
 - name: build_xnvme
@@ -44,21 +43,18 @@ steps:
     commands:
     - "cloud-init status --wait || true"
     - "uname -a"
-    - "apt-get update && apt-get install -y --no-install-recommends git pciutils nvme-cli"
     - "git clone --recursive --depth 1 https://github.com/xnvme/xnvme.git"
-    # xNVMe's own dependency script (installs build deps + libvfn).
-    - "cd xnvme && ./toolbox/pkgs/debian-trixie.sh"
-    # Slim build (kernel /dev/ng ioctl backend only: no SPDK/liburing/libvfn/
-    # libaio/isal). 'clean' ensures a fresh builddir for 'config-slim'. Note:
-    # this still installs the 'xnvme-driver' devbind helper.
-    - "cd xnvme && make clean config-slim build install && ldconfig"
+    # Dependency install for the guest distro (Ubuntu 26.04 ~ questing).
+    - "cd xnvme && ./toolbox/pkgs/ubuntu-questing.sh"
+    # Build with liburing (for io_uring_cmd) + the in-tree upcie backend;
+    # SPDK and libvfn disabled. (upcie lives in lib/upcie, built when be_upcie.)
+    - "cd xnvme && meson setup builddir -Dwith-liburing=enabled -Dwith-spdk=disabled -Dwith-libvfn=disabled && meson compile -C builddir && meson install -C builddir && ldconfig"
 
 - name: env_check
-  # Verify the emulated controller (vendor 1d1d:1f1f, NVMe class) enumerated,
-  # then exercise a driver attach/detach cycle with nosi's 'devbind' tool:
-  # detach binds it to uio_pci_generic (no IOMMU needed) so /dev/ng0n1
-  # disappears; re-bind to nvme brings it back -- confirming the device
-  # survives controller disable/re-enable.
+  # Verify the controller (vendor 1d1d:1f1f) enumerated, then a driver
+  # attach/detach cycle with devbind (preinstalled in the nosi guest): detach
+  # binds it to uio_pci_generic so /dev/ng0n1 disappears; re-bind nvme brings
+  # it back -- confirming the device survives controller disable/re-enable.
   uses: core.cmdrunner
   with:
     transport: ssh
@@ -67,8 +63,6 @@ steps:
     - "lspci -d 1d1d:1f1f -nn | grep -qi . || { echo 'ERROR: vfu_kvssd not on PCI bus'; exit 1; }"
     - "nvme list || true"
     - "ls -l /dev/ng0n1"
-    # devbind / hugepages / iommu are pip tools (PyPI); install a shim on PATH.
-    - "PIPX_BIN_DIR=/usr/local/bin pipx install devbind"
     - "devbind --list"
     - |
       set -eu
@@ -85,4 +79,3 @@ steps:
       for i in $(seq 1 30); do [ -e /dev/ng0n1 ] && break; sleep 0.5; done
       if [ ! -e /dev/ng0n1 ]; then echo "ERROR: did not re-attach"; exit 1; fi
       echo "OK re-attached: /dev/ng0n1 back"
-      devbind --list
