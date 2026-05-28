@@ -76,14 +76,21 @@ Status codes: 0x85 invalid val size, 0x86 invalid key size, 0x87 key not exists,
 
 ## Build
 
-C implementation, **Zig** build (`zig build`). Local dev uses zig at
-`~/.local/zig/zig` (0.16.0).
+C implementation built with **Zig** as the only toolchain. The sole build
+dependency is **Zig 0.16.0** -- no system cc/meson/cmake -- and it
+cross-compiles to any target from one host. `build.zig.zon` pins
+`minimum_zig_version`, so a wrong toolchain fails fast with a clear message
+rather than a cryptic build error.
 
 - `zig build` -- native (glibc) device + harness.
 - `zig build test` -- KV handler unit tests.
 - `zig build -Dtarget=x86_64-linux-musl -Dstatic=true` -- the single **static**
   x86_64 binary, no runtime deps (verified: `ldd` -> "not a dynamic
   executable"). Add `-Doptimize=ReleaseSafe` for release.
+- `zig build -Dtarget=aarch64-linux-musl -Dstatic=true` -- the same, static
+  **arm64** binary, cross-compiled from x86_64 with no extra setup.
+- `zig build -Dversion=1.2.3` -- stamp the version reported by `vfu_kvssd -V`
+  (the release workflow passes the git tag).
 - `tests/run_harness.sh [bin-dir]` -- starts the device, runs the client
   harness against it.
 

@@ -1,0 +1,20 @@
+.{
+    .name = .vfu_kvssd,
+    .version = "0.1.0",
+    .fingerprint = 0x8870a202bf0f8c29,
+    // Toolchain-only project (C built with Zig). Zig is pre-1.0 and breaks
+    // across minors, so pin the toolchain: the build runner checks this before
+    // compiling build.zig, failing fast with a clear message on the wrong zig.
+    .minimum_zig_version = "0.16.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "include",
+        "third_party",
+        "subprojects",
+        "tests",
+        "LICENSE",
+        "README.md",
+    },
+}
