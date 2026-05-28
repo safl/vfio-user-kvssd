@@ -35,7 +35,7 @@ jobs:
     timeout-minutes: 60
     container:
       # nosi ubuntu-2604-docker: QEMU 10.2 + cijoe, CI-tuned bootstrap host.
-      image: ghcr.io/${{ github.repository_owner }}/nosi/ubuntu-2604-docker:latest
+      image: ghcr.io/safl/nosi/ubuntu-2604-docker:latest
       # --privileged exposes the runner's /dev/kvm for nested KVM.
       options: --privileged
       # Needed only if the nosi package is private; harmless if it is public.
@@ -52,19 +52,34 @@ jobs:
           qemu-system-x86_64 --version | head -1
           cijoe --version
           ls -l /dev/kvm
+          # Hard gate: the whole point is the vfio-user client. Fail early and
+          # clearly if this QEMU build does not have it.
+          if ! qemu-system-x86_64 -device help 2>/dev/null | grep -qi 'vfio-user-pci'; then
+            echo "::error::qemu-system-x86_64 has no vfio-user-pci device (need QEMU >= 10.1)"
+            exit 1
+          fi
 
-      - name: Install image-staging tooling
+      - name: Install missing tooling
+        # The nosi image ships qemu + cijoe (+ likely zig); only fill gaps so
+        # we use what the image provides and stay fast.
         run: |
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            cloud-image-utils genisoimage curl xz-utils file
+          need() { command -v "$1" >/dev/null 2>&1; }
+          if ! need cloud-localds || ! need qemu-img || ! need curl; then
+            apt-get update
+            apt-get install -y --no-install-recommends \
+              cloud-image-utils qemu-utils genisoimage curl xz-utils file
+          fi
 
-      - name: Install Zig ${{ env.ZIG_VERSION }}
+      - name: Install Zig (only if the image lacks it)
         run: |
-          curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz
-          mkdir -p /opt/zig
-          tar -C /opt/zig --strip-components=1 -xf /tmp/zig.tar.xz
-          echo "/opt/zig" >> "$GITHUB_PATH"
+          if command -v zig >/dev/null 2>&1; then
+            echo "using image zig: $(zig version)"
+          else
+            curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz
+            mkdir -p /opt/zig
+            tar -C /opt/zig --strip-components=1 -xf /tmp/zig.tar.xz
+            echo "/opt/zig" >> "$GITHUB_PATH"
+          fi
 
       - name: Stage guest boot.img + cloud-init seed (root SSH)
         run: |
@@ -80,8 +95,8 @@ jobs:
           echo 'disable_root: false' >> "$ud"
           echo 'chpasswd:'           >> "$ud"
           echo '  expire: false'     >> "$ud"
-          echo '  list: |'           >> "$ud"
-          echo '    root:root'       >> "$ud"
+          echo '  users:'            >> "$ud"
+          echo '    - {name: root, password: root, type: text}' >> "$ud"
           echo 'runcmd:'             >> "$ud"
           echo "  - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config" >> "$ud"
           echo '  - systemctl restart ssh' >> "$ud"
