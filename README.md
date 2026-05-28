@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="vuk.png" alt="vuk - vfio-user-kvssd" width="480">
+</p>
+
 # vfio-user-kvssd -- working notes
 
 ## Why this exists
