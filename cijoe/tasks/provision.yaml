@@ -41,14 +41,14 @@ steps:
   with:
     transport: ssh
     commands:
-    - "cloud-init status --wait || true"
+    - "sudo cloud-init status --wait || true"
     - "uname -a"
     - "git clone --recursive --depth 1 https://github.com/xnvme/xnvme.git"
     # Dependency install for the guest distro (Ubuntu 26.04 ~ questing).
-    - "cd xnvme && ./toolbox/pkgs/ubuntu-questing.sh"
+    - "cd xnvme && sudo ./toolbox/pkgs/ubuntu-questing.sh"
     # Build with liburing (for io_uring_cmd) + the in-tree upcie backend;
     # SPDK and libvfn disabled. (upcie lives in lib/upcie, built when be_upcie.)
-    - "cd xnvme && meson setup builddir -Dwith-liburing=enabled -Dwith-spdk=disabled -Dwith-libvfn=disabled && meson compile -C builddir && meson install -C builddir && ldconfig"
+    - "cd xnvme && meson setup builddir -Dwith-liburing=enabled -Dwith-spdk=disabled -Dwith-libvfn=disabled && meson compile -C builddir && sudo meson install -C builddir && sudo ldconfig"
 
 - name: env_check
   # Verify the controller (vendor 1d1d:1f1f) enumerated, then a driver
@@ -61,21 +61,21 @@ steps:
     commands:
     - "lspci -nn"
     - "lspci -d 1d1d:1f1f -nn | grep -qi . || { echo 'ERROR: vfu_kvssd not on PCI bus'; exit 1; }"
-    - "nvme list || true"
+    - "sudo nvme list || true"
     - "ls -l /dev/ng0n1"
-    - "devbind --list"
+    - "sudo devbind --list"
     - |
       set -eu
       bdf=$(lspci -d 1d1d:1f1f -D | awk '{print $1}')
       echo "device: $bdf"
-      modprobe uio_pci_generic || true
+      sudo modprobe uio_pci_generic || true
       echo "## detach: bind $bdf -> uio_pci_generic"
-      devbind --bind uio_pci_generic --device "$bdf"
+      sudo devbind --bind uio_pci_generic --device "$bdf"
       for i in $(seq 1 30); do [ -e /dev/ng0n1 ] || break; sleep 0.5; done
       if [ -e /dev/ng0n1 ]; then echo "ERROR: still attached after detach"; exit 1; fi
       echo "OK detached: /dev/ng0n1 gone"
       echo "## re-attach: bind $bdf -> nvme"
-      devbind --bind nvme --device "$bdf"
+      sudo devbind --bind nvme --device "$bdf"
       for i in $(seq 1 30); do [ -e /dev/ng0n1 ] && break; sleep 0.5; done
       if [ ! -e /dev/ng0n1 ]; then echo "ERROR: did not re-attach"; exit 1; fi
       echo "OK re-attached: /dev/ng0n1 back"

@@ -16,21 +16,21 @@ steps:
   with:
     transport: ssh
     commands:
-    - "kvs enum"
-    - "kvs idfy-ns /dev/ng0n1 --nsid 1"
+    - "sudo kvs enum"
+    - "sudo kvs idfy-ns /dev/ng0n1 --nsid 1"
     # 1. kernel ioctl
-    - "xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1"
+    - "sudo xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1"
     # 2. io_uring_cmd (async kernel passthru; needs liburing)
-    - "xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1 --be io_uring_cmd"
+    - "sudo xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1 --be io_uring_cmd"
     # 3. upcie userspace backend: reserve hugepages, bind the controller to
     #    uio_pci_generic, run on the PCIe BDF, then restore the kernel driver.
     - |
       set -eu
       bdf=$(lspci -d 1d1d:1f1f -D | awk '{print $1}')
       echo "device: $bdf"
-      sysctl -w vm.nr_hugepages=512
-      modprobe uio_pci_generic || true
-      trap 'devbind --bind nvme --device "$bdf" || true' EXIT
-      devbind --bind uio_pci_generic --device "$bdf"
-      xnvme_tests_kvs kvs_io "$bdf" --dev-nsid 1 --be upcie
+      sudo sysctl -w vm.nr_hugepages=512
+      sudo modprobe uio_pci_generic || true
+      trap 'sudo devbind --bind nvme --device "$bdf" || true' EXIT
+      sudo devbind --bind uio_pci_generic --device "$bdf"
+      sudo xnvme_tests_kvs kvs_io "$bdf" --dev-nsid 1 --be upcie
     - "lspci -nn"

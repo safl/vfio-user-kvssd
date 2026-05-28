@@ -9,9 +9,12 @@
 # host-side library steps that don't take a transport would target this. We
 # avoid that: host steps use `transport: initiator` (local) or run_local, and
 # this transport is used only for the guest.
+# nosi images ship a baked operator account (odus / odus.321, passwordless
+# sudo, SSH password auth on first boot) -- reliable without depending on a
+# cloud-init seed enabling root login. Privileged commands use sudo.
 [cijoe.transport.ssh]
-username = "root"
-password = "root"
+username = "odus"
+password = "odus.321"
 hostname = "localhost"
 port = 4200
 
