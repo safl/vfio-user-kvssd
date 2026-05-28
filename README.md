@@ -4,6 +4,9 @@
 
 # vfio-user-kvssd -- working notes
 
+[![ci](https://github.com/safl/vfio-user-kvssd/actions/workflows/ci.yml/badge.svg)](https://github.com/safl/vfio-user-kvssd/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
+
 ## Why this exists
 
 xNVMe's test setup uses a QEMU fork (`SamsungDS/qemu`, branch `for-xnvme`) to
