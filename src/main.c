@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 #include <errno.h>
+#include <getopt.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,10 +29,16 @@ on_signal(int sig)
 #endif
 
 static void
-usage(const char *argv0)
+usage(FILE *f, const char *argv0)
 {
-	fprintf(stderr, "usage: %s -s <socket-path>\n", argv0);
-	fprintf(stderr, "       %s -V    (print version)\n", argv0);
+	fprintf(f, "usage: %s -s <socket-path>\n", argv0);
+	fprintf(f, "\n");
+	fprintf(f, "Emulate an NVMe Key-Value SSD over vfio-user.\n");
+	fprintf(f, "\n");
+	fprintf(f, "Options:\n");
+	fprintf(f, "  -s, --socket <path>  vfio-user UNIX socket to listen on (required)\n");
+	fprintf(f, "  -h, --help           show this help and exit\n");
+	fprintf(f, "  -V, --version        print version and exit\n");
 }
 
 /*
@@ -69,21 +76,31 @@ main(int argc, char **argv)
 	uint8_t *cfg;
 	int opt, ret;
 
-	while ((opt = getopt(argc, argv, "s:hV")) != -1) {
+	static const struct option long_opts[] = {
+		{ "socket",  required_argument, NULL, 's' },
+		{ "help",    no_argument,       NULL, 'h' },
+		{ "version", no_argument,       NULL, 'V' },
+		{ 0, 0, 0, 0 },
+	};
+
+	while ((opt = getopt_long(argc, argv, "s:hV", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 's':
 			sock = optarg;
 			break;
+		case 'h':
+			usage(stdout, argv[0]);
+			return 0;
 		case 'V':
 			printf("vfu_kvssd %s\n", VFU_KVSSD_VERSION);
 			return 0;
 		default:
-			usage(argv[0]);
+			usage(stderr, argv[0]);
 			return 2;
 		}
 	}
 	if (!sock) {
-		usage(argv[0]);
+		usage(stderr, argv[0]);
 		return 2;
 	}
 
