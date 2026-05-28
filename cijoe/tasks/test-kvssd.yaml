@@ -5,15 +5,16 @@ doc: |
   Validates the vfio-user KV SSD against a real guest kernel + xNVMe, the part
   the local client harness cannot cover.
 
+  Runs in the nosi ubuntu-2604-docker image (QEMU 10.2 + cijoe). The guest's
+  boot.img + cloud-init seed are staged by the workflow, so there is no QEMU
+  build and no guest_initialize step here.
+
   1. Build the static vfu_kvssd device (host, zig).
-  2. Build QEMU >= 10.1 from source (the vfio-user client landed in 10.1; distro
-     QEMU is too old).
-  3. Initialize the guest from a Debian cloud image (cloud-init enables root SSH).
-  4. Start vfu_kvssd, then boot the guest with a shareable memfd backend and
+  2. Start vfu_kvssd, then boot the guest with a shareable memfd backend and
      ``-device vfio-user-pci`` attached to the device's socket.
-  5. Wait for guest SSH, install + build xNVMe in the guest.
-  6. Run the xNVMe KV tests against the emulated KV namespace (/dev/ng0n1).
-  7. Power off, wait for QEMU to exit, stop the device.
+  3. Wait for guest SSH, install + build xNVMe in the guest.
+  4. Run the xNVMe KV tests against the emulated KV namespace (/dev/ng0n1).
+  5. Power off, wait for QEMU to exit, stop the device.
 
   Requires KVM and QEMU >= 10.1; intended for GHA via .github/workflows/qemu-kvssd.yml.
 
@@ -26,25 +27,9 @@ steps:
     # cijoe runs from cijoe/; build at the repo root (one level up).
     - "cd .. && zig build -Dtarget=x86_64-linux-musl -Dstatic=true -Doptimize=ReleaseSafe && file zig-out/bin/vfu_kvssd"
 
-- name: fetch_qemu
-  uses: core.cmdrunner
-  with:
-    transport: initiator
-    commands:
-    # qemu.build expects the repo present at qemu.repository.path; clone the
-    # tag (>= 10.1 for the vfio-user client) if it is not already there.
-    - "test -d $HOME/git/qemu || git clone --depth 1 --branch v10.1.0 --recurse-submodules https://github.com/qemu/qemu.git $HOME/git/qemu"
-
-- name: build_qemu
-  uses: qemu.build
-
-- name: init_guest
-  uses: qemu.guest_initialize
-  with:
-    guest_name: kvssd_amd64
-
 - name: start
-  # Starts the vfu_kvssd server and boots the guest with the vfio-user device.
+  # Starts the vfu_kvssd server and boots the guest (boot.img staged by the
+  # workflow) with the vfio-user device + shareable memfd backend.
   uses: vfu_kvssd_start
   with:
     guest_name: kvssd_amd64

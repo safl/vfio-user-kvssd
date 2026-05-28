@@ -145,20 +145,28 @@ test until a QEMU >=10.1 environment is available.
 ### Real guest under QEMU >= 10.1 (task #15)
 
 Encoded as a cijoe task so it runs on GHA (modeled on the cijoe/qemu setups in
-xnvme, bty, nosi):
+xnvme, bty, nosi). Rather than building QEMU from source, the job runs inside
+the **nosi `ubuntu-2604-docker`** image, which ships QEMU 10.2 (vfio-user
+client) + cijoe and is built to launch qemu guests under nested KVM on GHA:
 
-- `cijoe/configs/qemu-kvssd.toml` -- SSH transport, QEMU build (tag v10.1.0),
-  guest, `[kvssd]` device + Debian cloud system-image.
+- `cijoe/configs/qemu-kvssd.toml` -- SSH transport (guest), system QEMU
+  (`qemu-system-x86_64`), guest, `[kvssd]` device.
 - `cijoe/scripts/vfu_kvssd_start.py` -- starts the device, then boots the guest
   with a shareable memfd backend + `-device vfio-user-pci` (via
   `Guest.start(extra_args=...)`, the same hook xNVMe uses to inject `-device nvme`).
-- `cijoe/tasks/test-kvssd.yaml` -- build kvssd (zig) -> build QEMU -> init guest
-  -> start device+guest -> wait for SSH -> build xNVMe in-guest -> run KV tests
+- `cijoe/tasks/test-kvssd.yaml` -- build kvssd (zig) -> start device+guest ->
+  wait for SSH -> build xNVMe in-guest -> run KV tests
   (`kvs enum/idfy-ns`, `xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1`) ->
   poweroff. `cijoe --integrity-check` passes.
-- `.github/workflows/qemu-kvssd.yml` -- enables KVM (udev), installs Zig + QEMU
-  build deps, stages the Debian cloud image + a cloud-init seed (root SSH),
-  `pipx install cijoe`, runs the task, uploads the cijoe report.
+- `.github/workflows/qemu-kvssd.yml` -- runs in the nosi container
+  (`--privileged` for /dev/kvm), installs Zig, stages the guest `boot.img`
+  (Debian cloud) + a cloud-init seed (root SSH), runs the task, uploads the
+  cijoe report.
+
+cijoe gotcha: `cijoe.run()` (no transport) targets the *first* `[cijoe.transport.*]`
+entry, so host-side steps must use `transport: initiator` (local); only guest
+steps use `ssh`. The device/guest are staged directly (no `qemu.build` /
+`guest_initialize`).
 
 Run locally (needs QEMU >= 10.1 + KVM):
 `cd cijoe && cijoe tasks/test-kvssd.yaml -c configs/qemu-kvssd.toml`

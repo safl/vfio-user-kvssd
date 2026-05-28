@@ -1,9 +1,11 @@
 name: qemu-kvssd
 
-# End-to-end bring-up: boot a guest on QEMU >= 10.1, attach vfu_kvssd over
-# vfio-user, and run the xNVMe KV tests against the emulated KV namespace.
-# Heavy (builds QEMU from source, boots a VM under nested KVM), so it is
-# opt-in rather than part of the per-push CI.
+# End-to-end bring-up: attach vfu_kvssd to a guest over vfio-user and run the
+# xNVMe KV tests against the emulated KV namespace.
+#
+# Runs inside the nosi ubuntu-2604-docker image, which ships QEMU 10.2 (the
+# vfio-user client landed in 10.1) + cijoe, and is built to launch qemu guests
+# under nested KVM on GHA with --privileged. No QEMU build here.
 on:
   workflow_dispatch:
   push:
@@ -30,67 +32,57 @@ env:
 jobs:
   bringup:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 60
+    container:
+      # nosi ubuntu-2604-docker: QEMU 10.2 + cijoe, CI-tuned bootstrap host.
+      image: ghcr.io/${{ github.repository_owner }}/nosi/ubuntu-2604-docker:latest
+      # --privileged exposes the runner's /dev/kvm for nested KVM.
+      options: --privileged
+      # Needed only if the nosi package is private; harmless if it is public.
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install host dependencies (QEMU build + image tooling)
+      - name: Environment check (QEMU, cijoe, KVM)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            ninja-build meson pkg-config python3 python3-venv python3-pip \
-            libglib2.0-dev libpixman-1-dev libslirp-dev zlib1g-dev \
-            flex bison libfdt-dev \
-            qemu-utils cloud-image-utils genisoimage curl xz-utils pipx git
-          pipx ensurepath
+          qemu-system-x86_64 --version | head -1
+          cijoe --version
+          ls -l /dev/kvm
+
+      - name: Install image-staging tooling
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            cloud-image-utils genisoimage curl xz-utils file
 
       - name: Install Zig ${{ env.ZIG_VERSION }}
         run: |
           curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz
-          mkdir -p "$HOME/zig"
-          tar -C "$HOME/zig" --strip-components=1 -xf /tmp/zig.tar.xz
-          echo "$HOME/zig" >> "$GITHUB_PATH"
+          mkdir -p /opt/zig
+          tar -C /opt/zig --strip-components=1 -xf /tmp/zig.tar.xz
+          echo "/opt/zig" >> "$GITHUB_PATH"
 
-      - name: Enable KVM access for the runner
+      - name: Stage guest boot.img + cloud-init seed (root SSH)
         run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
-            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-          sudo kvm-ok || true
-          ls -l /dev/kvm
-
-      - name: Install cijoe
-        run: pipx install cijoe
-
-      - name: Cache QEMU source tree
-        uses: actions/cache@v4
-        with:
-          path: ~/git/qemu
-          key: qemu-v10.1.0-src
-
-      - name: Stage Debian cloud image
-        run: |
-          mkdir -p "$HOME/system_imaging/cloud" "$HOME/guests/kvssd-amd64"
-          img="$HOME/system_imaging/cloud/debian-13-x86_64.qcow2"
-          curl -fsSL "$DEBIAN_CLOUD_URL" -o "$img"
+          mkdir -p "$HOME/guests/kvssd-amd64"
+          boot="$HOME/guests/kvssd-amd64/boot.img"
+          curl -fsSL "$DEBIAN_CLOUD_URL" -o "$boot"
           # Room for apt + an in-guest xNVMe build; cloud-init growpart grows
           # the rootfs to fill the resized disk on first boot.
-          qemu-img resize "$img" +12G
-
-      - name: Build cloud-init seed (enable root SSH for the cijoe transport)
-        run: |
+          qemu-img resize "$boot" +12G
           ud=/tmp/user-data
-          echo '#cloud-config'        >  "$ud"
-          echo 'ssh_pwauth: true'     >> "$ud"
-          echo 'disable_root: false'  >> "$ud"
-          echo 'chpasswd:'            >> "$ud"
-          echo '  expire: false'      >> "$ud"
-          echo '  list: |'            >> "$ud"
-          echo '    root:root'        >> "$ud"
-          echo 'runcmd:'              >> "$ud"
+          echo '#cloud-config'       >  "$ud"
+          echo 'ssh_pwauth: true'    >> "$ud"
+          echo 'disable_root: false' >> "$ud"
+          echo 'chpasswd:'           >> "$ud"
+          echo '  expire: false'     >> "$ud"
+          echo '  list: |'           >> "$ud"
+          echo '    root:root'       >> "$ud"
+          echo 'runcmd:'             >> "$ud"
           echo "  - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config" >> "$ud"
           echo '  - systemctl restart ssh' >> "$ud"
           printf 'instance-id: kvssd\nlocal-hostname: kvssd\n' > /tmp/meta-data

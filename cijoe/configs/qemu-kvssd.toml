@@ -1,10 +1,14 @@
 # cijoe config for the vfu_kvssd QEMU bring-up.
 #
-# Boots a guest on upstream QEMU (>= 10.1, built from source for the vfio-user
-# client), attaches the vfu_kvssd device over vfio-user, and runs the xNVMe KV
-# tests against the emulated KV namespace from inside the guest.
+# Runs inside the nosi ubuntu-2604-docker image (QEMU 10.2 + cijoe ready), which
+# provides the vfio-user client. Attaches the vfu_kvssd device over vfio-user
+# and runs the xNVMe KV tests against the emulated KV namespace from the guest.
 
 # SSH transport into the guest (paramiko); the guest forwards :22 to host :4200.
+# NOTE: cijoe's `cijoe.run()` defaults to the first transport defined here, so
+# host-side library steps that don't take a transport would target this. We
+# avoid that: host steps use `transport: initiator` (local) or run_local, and
+# this transport is used only for the guest.
 [cijoe.transport.ssh]
 username = "root"
 password = "root"
@@ -12,34 +16,23 @@ hostname = "localhost"
 port = 4200
 
 [os]
-name = "debian"
-version = "trixie"
+name = "ubuntu"
+version = "26.04"
 
 [build.compiler]
 bin = "gcc"
 
-# QEMU >= 10.1 is required for the vfio-user client; build it from source.
-[qemu.repository]
-remote = "https://github.com/qemu/qemu.git"
-path = "{{ local.env.HOME }}/git/qemu"
-tag = "v10.1.0"
-
-[qemu.build]
-prefix = "{{ local.env.HOME }}/opt/qemu"
-
 [qemu]
 img_bin = "qemu-img"
 default_guest = "kvssd_amd64"
-default_systemimage = "debian-13-x86_64"
 
 [qemu.systems.x86_64]
-# The from-source build (qemu.build prefix) -- the distro QEMU is too old.
-bin = "{{ local.env.HOME }}/opt/qemu/bin/qemu-system-x86_64"
+# QEMU >= 10.1 (here 10.2 from the nosi image) for the vfio-user client.
+bin = "qemu-system-x86_64"
 
 [qemu.guests.kvssd_amd64]
 path = "{{ local.env.HOME }}/guests/kvssd-amd64"
 system_label = "x86_64"
-system_image_name = "debian-13-x86_64"
 
 # No '-m': guest RAM is provided by the shareable memfd backend that
 # vfu_kvssd_start.py injects (size from [kvssd].memory).
@@ -47,11 +40,6 @@ system_args.kwa = {cpu = "host", smp = 4, accel = "kvm"}
 
 # Forward guest :22 to host :4200 for the SSH transport above.
 system_args.tcp_forward = {host = 4200, guest = 22}
-
-# Guest disk image, resolved by qemu.guest_initialize. The workflow stages a
-# Debian cloud qcow2 (with cloud-init enabling root SSH) at this path.
-[system-imaging.images.debian-13-x86_64]
-disk.path = "{{ local.env.HOME }}/system_imaging/cloud/debian-13-x86_64.qcow2"
 
 # The device under test. cijoe runs from the cijoe/ dir, so 'binary' is given
 # relative to that (one level up to the repo root, where zig emits it).
@@ -62,8 +50,3 @@ memory = "4G"
 # cloud-init seed (label cidata) enabling root SSH on first boot; staged by
 # the workflow alongside the guest's boot.img.
 seed = "{{ local.env.HOME }}/guests/kvssd-amd64/seed.iso"
-
-# Where to fetch + build xNVMe in the guest to run the KV tests.
-[xnvme.repository]
-remote = "https://github.com/xnvme/xnvme.git"
-branch = "main"
