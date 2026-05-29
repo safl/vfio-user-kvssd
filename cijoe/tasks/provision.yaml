@@ -1,3 +1,4 @@
+---
 doc: |
   vfu_kvssd provisioning
   ======================
@@ -48,7 +49,8 @@ steps:
     - "cd xnvme && sudo ./toolbox/pkgs/ubuntu-questing.sh"
     # Build with liburing (for io_uring_cmd) + the in-tree upcie backend;
     # SPDK and libvfn disabled. (upcie lives in lib/upcie, built when be_upcie.)
-    - "cd xnvme && meson setup builddir -Dwith-liburing=enabled -Dwith-spdk=disabled -Dwith-libvfn=disabled && meson compile -C builddir && sudo meson install -C builddir && sudo ldconfig"
+    - "cd xnvme && meson setup builddir -Dwith-liburing=enabled -Dwith-spdk=disabled -Dwith-libvfn=disabled && meson compile\
+      \ -C builddir && sudo meson install -C builddir && sudo ldconfig"
 
 - name: env_check
   # Verify the controller (vendor 1d1d:1f1f) enumerated, then a driver

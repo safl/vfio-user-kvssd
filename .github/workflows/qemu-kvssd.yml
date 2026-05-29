@@ -1,3 +1,4 @@
+---
 name: qemu-kvssd
 
 # End-to-end bring-up: attach vfu_kvssd to a guest over vfio-user and run the
@@ -11,19 +12,19 @@ on:
   push:
     branches: [main]
     paths:
-      - cijoe/**
-      - src/**
-      - include/**
-      - build.zig
-      - .github/workflows/qemu-kvssd.yml
+    - cijoe/**
+    - src/**
+    - include/**
+    - build.zig
+    - .github/workflows/qemu-kvssd.yml
   pull_request:
     branches: [main]
     paths:
-      - cijoe/**
-      - src/**
-      - include/**
-      - build.zig
-      - .github/workflows/qemu-kvssd.yml
+    - cijoe/**
+    - src/**
+    - include/**
+    - build.zig
+    - .github/workflows/qemu-kvssd.yml
 
 env:
   ZIG_VERSION: "0.16.0"
@@ -42,131 +43,131 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
-      - name: Install Zig ${{ env.ZIG_VERSION }}
+    - name: Install Zig ${{ env.ZIG_VERSION }}
         # TEMPORARY: the nosi image currently ships zig 0.13, but build.zig
         # needs the 0.16 module API. Install 0.16 and prepend it to PATH so it
         # overrides the image's zig. Remove once nosi ships zig 0.16.
-        run: |
-          curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz
-          mkdir -p /opt/zig
-          tar -C /opt/zig --strip-components=1 -xf /tmp/zig.tar.xz
-          echo "/opt/zig" >> "$GITHUB_PATH"
+      run: |
+        curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz
+        mkdir -p /opt/zig
+        tar -C /opt/zig --strip-components=1 -xf /tmp/zig.tar.xz
+        echo "/opt/zig" >> "$GITHUB_PATH"
 
-      - name: Install cloud-image-utils
+    - name: Install cloud-image-utils
         # TEMPORARY: until the nosi image ships cloud-image-utils. Provides
         # cloud-localds, used to build the guest's cloud-init seed.
-        run: |
-          command -v cloud-localds >/dev/null 2>&1 || {
-            apt-get update && apt-get install -y --no-install-recommends cloud-image-utils
-          }
+      run: |
+        command -v cloud-localds >/dev/null 2>&1 || {
+          apt-get update && apt-get install -y --no-install-recommends cloud-image-utils
+        }
 
-      - name: Verify environment
+    - name: Verify environment
         # The nosi ubuntu-2604-docker image is expected to provide the full
         # host toolchain (QEMU >= 10.1 with vfio-user, cijoe, zig) plus the
         # image-staging tools. Assert that here rather than installing anything:
         # a missing tool means the image needs fixing, not the CI.
-        run: |
-          fail=0
-          check() {
-            if command -v "$1" >/dev/null 2>&1; then
-              echo "ok: $1 -> $(command -v "$1")"
-            else
-              echo "::error::missing required tool: $1"; fail=1
-            fi
-          }
-          check qemu-system-x86_64
-          check qemu-img
-          check cijoe
-          check zig
-          check git
-          check curl
-          check cloud-localds
-          qemu-system-x86_64 --version | head -1 || true
-          cijoe --version || true
-          zig version || true
-          # build.zig uses the 0.15+/0.16 module API (createModule/root_module),
-          # so the image's zig must be the matching series, not just present.
-          if command -v zig >/dev/null 2>&1; then
-            zv="$(zig version 2>/dev/null)"
-            case "$zv" in
-              ${ZIG_VERSION%.*}.*) echo "ok: zig $zv" ;;
-              *) echo "::error::zig $zv incompatible; build.zig needs ${ZIG_VERSION%.*}.x (image must ship it)"; fail=1 ;;
-            esac
+      run: |
+        fail=0
+        check() {
+          if command -v "$1" >/dev/null 2>&1; then
+            echo "ok: $1 -> $(command -v "$1")"
+          else
+            echo "::error::missing required tool: $1"; fail=1
           fi
-          if ! qemu-system-x86_64 -device help 2>/dev/null | grep -qi 'vfio-user-pci'; then
-            echo "::error::qemu has no vfio-user-pci device (need QEMU >= 10.1)"; fail=1
-          fi
-          if [ ! -e /dev/kvm ]; then
-            echo "::error::/dev/kvm not available (need --privileged + host KVM)"; fail=1
-          fi
-          ls -l /dev/kvm 2>/dev/null || true
-          exit "$fail"
+        }
+        check qemu-system-x86_64
+        check qemu-img
+        check cijoe
+        check zig
+        check git
+        check curl
+        check cloud-localds
+        qemu-system-x86_64 --version | head -1 || true
+        cijoe --version || true
+        zig version || true
+        # build.zig uses the 0.15+/0.16 module API (createModule/root_module),
+        # so the image's zig must be the matching series, not just present.
+        if command -v zig >/dev/null 2>&1; then
+          zv="$(zig version 2>/dev/null)"
+          case "$zv" in
+            ${ZIG_VERSION%.*}.*) echo "ok: zig $zv" ;;
+            *) echo "::error::zig $zv incompatible; build.zig needs ${ZIG_VERSION%.*}.x (image must ship it)"; fail=1 ;;
+          esac
+        fi
+        if ! qemu-system-x86_64 -device help 2>/dev/null | grep -qi 'vfio-user-pci'; then
+          echo "::error::qemu has no vfio-user-pci device (need QEMU >= 10.1)"; fail=1
+        fi
+        if [ ! -e /dev/kvm ]; then
+          echo "::error::/dev/kvm not available (need --privileged + host KVM)"; fail=1
+        fi
+        ls -l /dev/kvm 2>/dev/null || true
+        exit "$fail"
 
-      - name: Stage guest boot.img (nosi headless) + cloud-init seed (root SSH)
-        run: |
-          set -eu
-          mkdir -p "$HOME/guests/kvssd-amd64"
-          boot="$HOME/guests/kvssd-amd64/boot.img"
-          cfg=cijoe/configs/qemu-kvssd.toml
-          repo=$(python3 -c 'import tomllib,sys;print(tomllib.load(open(sys.argv[1],"rb"))["guest_image"]["repository"])' "$cfg")
-          digest=$(python3 -c 'import tomllib,sys;print(tomllib.load(open(sys.argv[1],"rb"))["guest_image"]["digest"])' "$cfg")
-          # Pull the pinned oras disk-image blob (anonymous ghcr token), decompress,
-          # and convert raw -> qcow2 (the cijoe wrapper opens boot.img as qcow2).
-          tok=$(curl -fsSL "https://ghcr.io/token?scope=repository:${repo}:pull" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
-          echo "fetching ${repo}@${digest}"
-          curl -fsSL -H "Authorization: Bearer ${tok}" "https://ghcr.io/v2/${repo}/blobs/${digest}" -o /tmp/nosi.img.gz
-          gunzip -f /tmp/nosi.img.gz
-          qemu-img convert -f raw -O qcow2 /tmp/nosi.img "$boot"
-          rm -f /tmp/nosi.img
-          # Room for the in-guest xNVMe build; cloud-init growpart grows the rootfs.
-          qemu-img resize "$boot" +8G
-          qemu-img info "$boot" | head -4
-          # cloud-init NoCloud seed: nosi images re-run cloud-init on first boot,
-          # so this enables root SSH for the cijoe transport.
-          ud=/tmp/user-data
-          echo '#cloud-config'       >  "$ud"
-          echo 'ssh_pwauth: true'    >> "$ud"
-          echo 'disable_root: false' >> "$ud"
-          echo 'chpasswd:'           >> "$ud"
-          echo '  expire: false'     >> "$ud"
-          echo '  users:'            >> "$ud"
-          echo '    - {name: root, password: root, type: text}' >> "$ud"
-          echo 'runcmd:'             >> "$ud"
-          echo "  - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config" >> "$ud"
-          echo '  - systemctl restart ssh' >> "$ud"
-          printf 'instance-id: kvssd\nlocal-hostname: kvssd\n' > /tmp/meta-data
-          cloud-localds "$HOME/guests/kvssd-amd64/seed.iso" "$ud" /tmp/meta-data
+    - name: Stage guest boot.img (nosi headless) + cloud-init seed (root SSH)
+      run: |
+        set -eu
+        mkdir -p "$HOME/guests/kvssd-amd64"
+        boot="$HOME/guests/kvssd-amd64/boot.img"
+        cfg=cijoe/configs/qemu-kvssd.toml
+        repo=$(python3 -c 'import tomllib,sys;print(tomllib.load(open(sys.argv[1],"rb"))["guest_image"]["repository"])' "$cfg")
+        digest=$(python3 -c 'import tomllib,sys;print(tomllib.load(open(sys.argv[1],"rb"))["guest_image"]["digest"])' "$cfg")
+        # Pull the pinned oras disk-image blob (anonymous ghcr token), decompress,
+        # and convert raw -> qcow2 (the cijoe wrapper opens boot.img as qcow2).
+        tok=$(curl -fsSL "https://ghcr.io/token?scope=repository:${repo}:pull" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+        echo "fetching ${repo}@${digest}"
+        curl -fsSL -H "Authorization: Bearer ${tok}" "https://ghcr.io/v2/${repo}/blobs/${digest}" -o /tmp/nosi.img.gz
+        gunzip -f /tmp/nosi.img.gz
+        qemu-img convert -f raw -O qcow2 /tmp/nosi.img "$boot"
+        rm -f /tmp/nosi.img
+        # Room for the in-guest xNVMe build; cloud-init growpart grows the rootfs.
+        qemu-img resize "$boot" +8G
+        qemu-img info "$boot" | head -4
+        # cloud-init NoCloud seed: nosi images re-run cloud-init on first boot,
+        # so this enables root SSH for the cijoe transport.
+        ud=/tmp/user-data
+        echo '#cloud-config'       >  "$ud"
+        echo 'ssh_pwauth: true'    >> "$ud"
+        echo 'disable_root: false' >> "$ud"
+        echo 'chpasswd:'           >> "$ud"
+        echo '  expire: false'     >> "$ud"
+        echo '  users:'            >> "$ud"
+        echo '    - {name: root, password: root, type: text}' >> "$ud"
+        echo 'runcmd:'             >> "$ud"
+        echo "  - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config" >> "$ud"
+        echo '  - systemctl restart ssh' >> "$ud"
+        printf 'instance-id: kvssd\nlocal-hostname: kvssd\n' > /tmp/meta-data
+        cloud-localds "$HOME/guests/kvssd-amd64/seed.iso" "$ud" /tmp/meta-data
 
-      - name: Provision guest + device
-        run: cd cijoe && cijoe tasks/provision.yaml --monitor -c configs/qemu-kvssd.toml -o cijoe-output/provision
+    - name: Provision guest + device
+      run: cd cijoe && cijoe tasks/provision.yaml --monitor -c configs/qemu-kvssd.toml -o cijoe-output/provision
 
-      - name: Run KV tests
+    - name: Run KV tests
         # The provision step left the guest + device running; no teardown -- the
         # container is discarded when the job ends.
-        run: cd cijoe && cijoe tasks/test.yaml --monitor -c configs/qemu-kvssd.toml -o cijoe-output/test
+      run: cd cijoe && cijoe tasks/test.yaml --monitor -c configs/qemu-kvssd.toml -o cijoe-output/test
 
-      - name: Collect device log
-        if: always()
+    - name: Collect device log
+      if: always()
         # cijoe starts vfu_kvssd as a detached process writing to <socket>.log
         # (here /tmp/vfu_kvssd.log). GHA's container has no systemd/PID 1, so the
         # output cannot be captured via journald; fold the logfile into the
         # report bundle so it ships with the uploaded artifact for post-mortem.
-        run: |
-          mkdir -p cijoe/cijoe-output
-          cp -v /tmp/vfu_kvssd.log cijoe/cijoe-output/ || echo "no device log at /tmp/vfu_kvssd.log"
-          echo "::group::vfu_kvssd device log (/tmp/vfu_kvssd.log)"
-          cat /tmp/vfu_kvssd.log 2>/dev/null || echo "no device log at /tmp/vfu_kvssd.log"
-          echo "::endgroup::"
+      run: |
+        mkdir -p cijoe/cijoe-output
+        cp -v /tmp/vfu_kvssd.log cijoe/cijoe-output/ || echo "no device log at /tmp/vfu_kvssd.log"
+        echo "::group::vfu_kvssd device log (/tmp/vfu_kvssd.log)"
+        cat /tmp/vfu_kvssd.log 2>/dev/null || echo "no device log at /tmp/vfu_kvssd.log"
+        echo "::endgroup::"
 
-      - name: Upload cijoe report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cijoe-kvssd-report
-          path: cijoe/cijoe-output/
-          if-no-files-found: warn
-          retention-days: 14
+    - name: Upload cijoe report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: cijoe-kvssd-report
+        path: cijoe/cijoe-output/
+        if-no-files-found: warn
+        retention-days: 14

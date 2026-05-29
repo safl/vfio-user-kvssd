@@ -1,0 +1,69 @@
+---
+# Pre-commit hooks (https://pre-commit.com/). Run manually; the git hook is
+# intentionally not installed:
+#   pre-commit run --all-files
+#
+# Submodules and vendored third-party sources are not ours to format.
+exclude: ^(subprojects|third_party)/
+
+default_language_version:
+  python: python3
+
+repos:
+# C source/header format. clang-format runs as a system hook so it uses the
+# locally installed clang-format (and the in-tree .clang-format adopted from
+# xNVMe), avoiding the version-drift reflow a pinned binary would cause.
+- repo: local
+  hooks:
+  - id: clang-format
+    name: C-format
+    language: system
+    entry: clang-format -i --style=file
+    files: \.(c|h)$
+
+# General hygiene.
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.6.0
+  hooks:
+  - id: trailing-whitespace
+  - id: end-of-file-fixer
+  - id: mixed-line-ending
+    args: ['--fix=lf']
+  - id: check-merge-conflict
+  - id: check-added-large-files
+    args: ['--maxkb=1024']
+  - id: check-executables-have-shebangs
+  - id: check-yaml
+    name: YAML-format-check
+    files: \.(yaml|yml)$
+
+# YAML format (GitHub Actions workflows + cijoe tasks).
+- repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
+  rev: 0.2.3
+  hooks:
+  - id: yamlfmt
+    name: YAML-format
+    args:
+    - '--mapping=2'
+    - '--sequence=2'
+    - '--offset=0'
+    - '--width=120'
+    - '--preserve-quotes'
+    files: \.(yaml|yml)$
+
+# Shell (tests/run_harness.sh and friends).
+- repo: https://github.com/shellcheck-py/shellcheck-py
+  rev: v0.10.0.1
+  hooks:
+  - id: shellcheck
+
+# Python (cijoe helpers). ruff replaces black + isort + flake8 in one tool:
+# lint (with --fix), import-sort (the I rules), and format.
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.15.8
+  hooks:
+  - id: ruff-check
+    name: Python-lint-ruff
+    args: ['--fix', '--extend-select=I']
+  - id: ruff-format
+    name: Python-format-ruff

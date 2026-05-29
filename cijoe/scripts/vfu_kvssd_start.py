@@ -75,8 +75,7 @@ def main(args, cijoe):
     # command via a shell, so wrap the (space-free) JSON in single quotes to
     # preserve the inner double quotes.
     vfio_dev = (
-        '{"driver":"vfio-user-pci",'
-        '"socket":{"type":"unix","path":"' + socket + '"}}'
+        '{"driver":"vfio-user-pci","socket":{"type":"unix","path":"' + socket + '"}}'
     )
     extra_args = [
         # q35 for PCIe; memory-backend wires guest RAM to the shareable memfd.
