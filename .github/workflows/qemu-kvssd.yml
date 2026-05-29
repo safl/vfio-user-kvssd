@@ -149,6 +149,19 @@ jobs:
         # container is discarded when the job ends.
         run: cd cijoe && cijoe tasks/test.yaml --monitor -c configs/qemu-kvssd.toml -o cijoe-output/test
 
+      - name: Collect device log
+        if: always()
+        # cijoe starts vfu_kvssd as a detached process writing to <socket>.log
+        # (here /tmp/vfu_kvssd.log). GHA's container has no systemd/PID 1, so the
+        # output cannot be captured via journald; fold the logfile into the
+        # report bundle so it ships with the uploaded artifact for post-mortem.
+        run: |
+          mkdir -p cijoe/cijoe-output
+          cp -v /tmp/vfu_kvssd.log cijoe/cijoe-output/ || echo "no device log at /tmp/vfu_kvssd.log"
+          echo "::group::vfu_kvssd device log (/tmp/vfu_kvssd.log)"
+          cat /tmp/vfu_kvssd.log 2>/dev/null || echo "no device log at /tmp/vfu_kvssd.log"
+          echo "::endgroup::"
+
       - name: Upload cijoe report
         if: always()
         uses: actions/upload-artifact@v4
