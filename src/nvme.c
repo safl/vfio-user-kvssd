@@ -22,7 +22,11 @@
 #define NVME_REG_DOORBELL 0x1000
 
 #define NVME_CC_EN 0x1u
+#define NVME_CC_SHN_SHIFT 14
+#define NVME_CC_SHN_MASK (0x3u << NVME_CC_SHN_SHIFT)
 #define NVME_CSTS_RDY 0x1u
+#define NVME_CSTS_SHST_MASK (0x3u << 2)
+#define NVME_CSTS_SHST_COMPLETE (0x2u << 2) /* shutdown processing complete */
 
 /* Admin command opcodes. */
 #define NVME_ADM_DELETE_SQ 0x00
@@ -575,7 +579,8 @@ nvme_enable(struct nvme_ctrl *n)
 	acq->irq = 0;
 	acq->enabled = true;
 
-	n->csts |= NVME_CSTS_RDY;
+	/* Fresh enable: ready, shutdown status cleared. */
+	n->csts = NVME_CSTS_RDY;
 
 	NVME_TRACE("enable: asq=0x%llx acq=0x%llx asqs=%u acqs=%u -> csts=0x%x",
 		   (unsigned long long)n->asq, (unsigned long long)n->acq, asq->size, acq->size,
@@ -668,13 +673,25 @@ nvme_reg_write(struct nvme_ctrl *n, size_t offset, const char *buf, size_t count
 		break;
 	case NVME_REG_CC: {
 		uint32_t old = n->cc;
+		uint32_t shn = (uint32_t)v & NVME_CC_SHN_MASK;
 		n->cc = (uint32_t)v;
-		NVME_TRACE("CC write: 0x%x -> 0x%x (en %u->%u)", old, n->cc, old & NVME_CC_EN,
-			   n->cc & NVME_CC_EN);
+		NVME_TRACE("CC write: 0x%x -> 0x%x (en %u->%u shn=%u)", old, n->cc,
+			   old & NVME_CC_EN, n->cc & NVME_CC_EN, shn >> NVME_CC_SHN_SHIFT);
 		if ((n->cc & NVME_CC_EN) && !(old & NVME_CC_EN)) {
 			nvme_enable(n);
 		} else if (!(n->cc & NVME_CC_EN) && (old & NVME_CC_EN)) {
 			nvme_disable(n);
+		}
+		/*
+		 * Shutdown notification (CC.SHN != 0): tear the queues down and report
+		 * SHST=complete so the host's controller-shutdown wait returns instead
+		 * of timing out (~10s) and aborting -- a stuck shutdown wedges the
+		 * controller across the driver unbind that the tests do every case.
+		 */
+		if (shn) {
+			nvme_disable(n);
+			n->csts = (n->csts & ~NVME_CSTS_SHST_MASK) | NVME_CSTS_SHST_COMPLETE;
+			NVME_TRACE("shutdown: SHST=complete (csts=0x%x)", n->csts);
 		}
 		break;
 	}
