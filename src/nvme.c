@@ -54,11 +54,15 @@
 
 #define NVME_STATUS_INVALID_QID 0x0101 /* SCT command-specific, SC 0x01 */
 
+int nvme_trace_enabled;
+
 int
 nvme_ctrl_init(struct nvme_ctrl *n, vfu_ctx_t *vfu)
 {
 	memset(n, 0, sizeof(*n));
 	n->vfu = vfu;
+
+	nvme_trace_enabled = getenv("VFU_KVSSD_TRACE") != NULL;
 
 	/*
 	 * CAP: MQES=1023, CQR=1, TO=0xf, DSTRD=0,
@@ -172,6 +176,8 @@ nvme_prp_xfer(vfu_ctx_t *vfu, uint64_t prp1, uint64_t prp2, void *buf, size_t le
 	r = vfu_addr_to_sgl(vfu, (vfu_dma_addr_t)(uintptr_t)prp1, first, SG_AT(sgl, nsg),
 			    max_sg - nsg, prot);
 	if (r <= 0) {
+		NVME_TRACE("prp_xfer: addr_to_sgl(prp1=0x%llx len=%zu) failed r=%d",
+			   (unsigned long long)prp1, first, r);
 		goto out;
 	}
 	nsg += (size_t)r;
@@ -182,6 +188,8 @@ nvme_prp_xfer(vfu_ctx_t *vfu, uint64_t prp1, uint64_t prp2, void *buf, size_t le
 			/* TODO: PRP lists / chaining. Prototype transfers (KV
 			 * values and identify pages) are at most two pages; the
 			 * controller advertises MDTS accordingly. */
+			NVME_TRACE("prp_xfer: UNSUPPORTED >2-page transfer len=%zu (needs PRP list)",
+				   len);
 			goto out;
 		}
 		r = vfu_addr_to_sgl(vfu, (vfu_dma_addr_t)(uintptr_t)prp2, remaining,
@@ -270,6 +278,8 @@ nvme_admin_identify(struct nvme_ctrl *n, const NvmeSqe *sqe)
 	uint8_t cns = sqe->cdw10 & 0xff;
 	uint8_t csi = (sqe->cdw11 >> 24) & 0xff;
 	uint8_t buf[KVSSD_PAGE_SIZE];
+
+	NVME_TRACE("identify: cns=0x%02x csi=0x%02x nsid=%u", cns, csi, sqe->nsid);
 
 	memset(buf, 0, sizeof(buf));
 
@@ -385,6 +395,8 @@ nvme_admin_create_cq(struct nvme_ctrl *n, const NvmeSqe *sqe)
 	cq->phase = 1;
 	cq->irq = (int)iv; /* recorded; INTx used regardless for now */
 	cq->enabled = true;
+	NVME_TRACE("create_cq qid=%u size=%u iv=%u dma=0x%llx", qid, cq->size, iv,
+		   (unsigned long long)cq->dma);
 	return NVME_SUCCESS;
 }
 
@@ -407,6 +419,8 @@ nvme_admin_create_sq(struct nvme_ctrl *n, const NvmeSqe *sqe)
 	sq->qid = qid;
 	sq->cqid = cqid;
 	sq->enabled = true;
+	NVME_TRACE("create_sq qid=%u size=%u cqid=%u dma=0x%llx", qid, sq->size, cqid,
+		   (unsigned long long)sq->dma);
 	return NVME_SUCCESS;
 }
 
@@ -530,6 +544,8 @@ nvme_process_sq(struct nvme_ctrl *n, uint16_t qid)
 		sq->head = (uint16_t)((sq->head + 1) % sq->size);
 
 		status = (qid == 0) ? nvme_admin_cmd(n, &sqe, &cdw0) : nvme_io_kv(n, &sqe);
+		NVME_TRACE("%s q%u opc=0x%02x cid=%u -> status=0x%04x", qid == 0 ? "adm" : "io", qid,
+			   sqe.opcode, sqe.cid, status);
 		if (status == NVME_NO_COMPLETE) {
 			continue;
 		}
@@ -560,6 +576,10 @@ nvme_enable(struct nvme_ctrl *n)
 	acq->enabled = true;
 
 	n->csts |= NVME_CSTS_RDY;
+
+	NVME_TRACE("enable: asq=0x%llx acq=0x%llx asqs=%u acqs=%u -> csts=0x%x",
+		   (unsigned long long)n->asq, (unsigned long long)n->acq, asq->size, acq->size,
+		   n->csts);
 }
 
 static void
@@ -570,6 +590,23 @@ nvme_disable(struct nvme_ctrl *n)
 		n->cq[i].enabled = false;
 	}
 	n->csts &= ~NVME_CSTS_RDY;
+
+	NVME_TRACE("disable: all queues down -> csts=0x%x", n->csts);
+}
+
+void
+nvme_ctrl_reset(struct nvme_ctrl *n)
+{
+	NVME_TRACE("reset: cc=0x%x csts=0x%x -> clear", n->cc, n->csts);
+
+	nvme_disable(n);
+	n->cc = 0;
+	n->csts = 0;
+	n->aqa = 0;
+	n->asq = 0;
+	n->acq = 0;
+	n->intms = 0;
+	n->intmc = 0;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -632,6 +669,8 @@ nvme_reg_write(struct nvme_ctrl *n, size_t offset, const char *buf, size_t count
 	case NVME_REG_CC: {
 		uint32_t old = n->cc;
 		n->cc = (uint32_t)v;
+		NVME_TRACE("CC write: 0x%x -> 0x%x (en %u->%u)", old, n->cc, old & NVME_CC_EN,
+			   n->cc & NVME_CC_EN);
 		if ((n->cc & NVME_CC_EN) && !(old & NVME_CC_EN)) {
 			nvme_enable(n);
 		} else if (!(n->cc & NVME_CC_EN) && (old & NVME_CC_EN)) {

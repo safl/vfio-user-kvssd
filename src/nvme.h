@@ -11,12 +11,28 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <sys/types.h>
 
 #include <libvfio-user.h>
 
 #include "kv.h"
 #include "kvssd_nvme_spec.h"
+
+/*
+ * Lightweight tracing of the controller/admin/IO path. Enabled at runtime when
+ * the VFU_KVSSD_TRACE environment variable is set (any value). Output goes to
+ * stderr, which the launcher redirects to <socket>.log; CI bundles that file so
+ * a host driver's probe sequence (e.g. SPDK) can be inspected post-mortem.
+ */
+extern int nvme_trace_enabled;
+#define NVME_TRACE(fmt, ...)                                                                        \
+	do {                                                                                       \
+		if (nvme_trace_enabled) {                                                           \
+			fprintf(stderr, "kvssd[trace] " fmt "\n", ##__VA_ARGS__);                   \
+			fflush(stderr);                                                             \
+		}                                                                                  \
+	} while (0)
 
 /* Total queues including the admin queue at index 0. */
 #define NVME_MAX_QUEUES 64
@@ -78,6 +94,15 @@ int
 nvme_ctrl_init(struct nvme_ctrl *n, vfu_ctx_t *vfu);
 void
 nvme_ctrl_teardown(struct nvme_ctrl *n);
+
+/*
+ * Reset the controller to its post-power-on state: disable all queues, clear
+ * CC/CSTS and the admin-queue registers. Called on a vfio-user device reset
+ * (FLR / bus reset / lost connection), which is what driver unbind/rebind and
+ * userspace-driver init (SPDK, xNVMe upcie) trigger between test cases.
+ */
+void
+nvme_ctrl_reset(struct nvme_ctrl *n);
 
 /* BAR0 access callback (matches vfu_region_access_cb_t). */
 ssize_t

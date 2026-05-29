@@ -57,14 +57,31 @@ static void
 dma_register(vfu_ctx_t *vfu, vfu_dma_info_t *info)
 {
 	(void)vfu;
-	(void)info;
+	NVME_TRACE("dma_register: iova=%p len=%zu", info->iova.iov_base, info->iova.iov_len);
 }
 
 static void
 dma_unregister(vfu_ctx_t *vfu, vfu_dma_info_t *info)
 {
 	(void)vfu;
-	(void)info;
+	NVME_TRACE("dma_unregister: iova=%p len=%zu", info->iova.iov_base, info->iova.iov_len);
+}
+
+/*
+ * Reset the emulated controller on a vfio-user device reset. The host triggers
+ * this on FLR / bus reset / a new client attaching, which is exactly what
+ * driver unbind/rebind and userspace-driver (SPDK, xNVMe upcie) init do between
+ * test cases. Without it the controller keeps stale CSTS.RDY/queues/ASQ/ACQ and
+ * the next driver's probe runs against a half-initialised device.
+ */
+static int
+nvme_reset_cb(vfu_ctx_t *vfu, vfu_reset_type_t type)
+{
+	struct nvme_ctrl *n = vfu_get_private(vfu);
+
+	NVME_TRACE("device reset (type=%d)", (int)type);
+	nvme_ctrl_reset(n);
+	return 0;
 }
 
 int
@@ -157,6 +174,11 @@ main(int argc, char **argv)
 	if (vfu_setup_device_dma(vfu, LIBVFIO_USER_MAX_DMA_REGIONS, dma_register, dma_unregister) <
 	    0) {
 		perror("vfu_setup_device_dma");
+		goto err;
+	}
+
+	if (vfu_setup_device_reset_cb(vfu, nvme_reset_cb) < 0) {
+		perror("vfu_setup_device_reset_cb");
 		goto err;
 	}
 
