@@ -23,7 +23,7 @@ repos:
 
 # General hygiene.
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.6.0
+  rev: v6.0.0
   hooks:
   - id: trailing-whitespace
   - id: end-of-file-fixer
@@ -53,14 +53,14 @@ repos:
 
 # Shell (tests/run_harness.sh and friends).
 - repo: https://github.com/shellcheck-py/shellcheck-py
-  rev: v0.10.0.1
+  rev: v0.11.0.1
   hooks:
   - id: shellcheck
 
 # Python (cijoe helpers). ruff replaces black + isort + flake8 in one tool:
 # lint (with --fix), import-sort (the I rules), and format.
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.15.8
+  rev: v0.15.15
   hooks:
   - id: ruff-check
     name: Python-lint-ruff
