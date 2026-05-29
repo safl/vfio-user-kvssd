@@ -37,7 +37,7 @@ jobs:
         for tgt in x86_64-linux-musl aarch64-linux-musl; do
           arch=${tgt%%-*}
           zig build -Dtarget="$tgt" -Dstatic=true -Doptimize=ReleaseSafe -Dversion="$ver"
-          out="dist/vfu_kvssd-${arch}-linux"
+          out="dist/vfu_kvssd-${ver}-${arch}-linux"
           cp zig-out/bin/vfu_kvssd "$out"
           file "$out"
           # Sanity: must be statically linked.
@@ -51,6 +51,5 @@ jobs:
       with:
         generate_release_notes: true
         files: |
-          dist/vfu_kvssd-x86_64-linux
-          dist/vfu_kvssd-aarch64-linux
+          dist/vfu_kvssd-*-linux
           dist/SHA256SUMS
