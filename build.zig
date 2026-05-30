@@ -121,6 +121,24 @@ pub fn build(b: *std.Build) void {
     if (want_static) harness.linkage = .static;
     b.installArtifact(harness);
 
+    // Stress hammer: drives the device's state machine the same way Linux +
+    // QEMU vfio-user-pci would under bind/unbind/FLR/CC churn, so wedges
+    // reproduce locally instead of in CI.
+    const hammer_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    hammer_mod.addIncludePath(b.path("include"));
+    addLibvfioUser(b, hammer_mod);
+    hammer_mod.addCSourceFiles(.{
+        .files = &.{"tests/client_hammer.c"},
+        .flags = &.{ "-std=gnu11", "-D_GNU_SOURCE", "-Wall", "-Wextra", "-include", "third_party/musl-compat/prelude.h" },
+    });
+    const hammer = b.addExecutable(.{ .name = "vfu_kvssd_hammer", .root_module = hammer_mod });
+    if (want_static) hammer.linkage = .static;
+    b.installArtifact(hammer);
+
     // KV handler unit test (no libvfio-user dependency).
     const test_mod = b.createModule(.{
         .target = target,
