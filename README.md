@@ -9,13 +9,24 @@
 [![built with Zig](https://img.shields.io/badge/built%20with-Zig%200.16.0-f7a41d.svg)](https://ziglang.org)
 [![static musl](https://img.shields.io/badge/static%20musl-x86__64%20%7C%20aarch64-blue.svg)](https://github.com/safl/vfio-user-kvssd/releases)
 
-`vfu_kvssd` is a userspace process that emulates an **NVMe Key-Value (KV) SSD**
-and attaches to **stock upstream QEMU (>= 10.1)** over a vfio-user socket. It
-lets xNVMe exercise the NVMe KV command set without the old `SamsungDS/qemu`
-fork. KV is the only NVMe feature still missing from upstream QEMU.
+`vfu_kvssd` is an emulator of an **NVMe PCIe controller with a single
+namespace supporting the Key-Value Command-Set (KVS)**, encapsulated in
+a userspace process behind a vfio-user interface. Any vfio-user client
+can drive it (the bundled `tests/` harness does so directly for unit
+testing without QEMU in the loop).
 
-It is C, built with **Zig** as the only toolchain, and ships as a single static
-x86_64/arm64 binary with no runtime dependencies.
+A most useful client is **stock upstream QEMU (>= 10.1)**: attach
+`vfu_kvssd` to it over a vfio-user socket and the guest operating system
+sees an NVMe 2.0 controller with the KV Command Set, virtually
+indistinguishable from a physical NVMe KV SSD.
+
+It exists so the xNVMe CI can drop its dependency on the outdated
+`SamsungDS/qemu` fork (the only QEMU build that carried KV support). With
+`vfu_kvssd` xNVMe runs against latest stock QEMU; everything non-upstream
+lives in this self-contained external process.
+
+Written in C, built with **Zig** as the only toolchain, and shipped as a
+single static x86_64/arm64 binary with no runtime dependencies.
 
 ## Quick start
 
@@ -60,7 +71,7 @@ qemu-system-x86_64 \
 ```
 
 The automated guest bring-up + xNVMe KV tests run under cijoe in CI; see
-`cijoe/` and `HANDOFF.md`.
+`cijoe/`.
 
 ## KV command set
 
@@ -84,8 +95,3 @@ same guest is **not supported yet**. The Linux NVMe driver de-duplicates
 controllers by Serial Number and by NVM Subsystem NQN; a second instance with
 the same SN/SUBNQN will fail to bind. Until the SN/SUBNQN become CLI knobs,
 keep the deployment to one instance per guest.
-
-## More detail
-
-- `HANDOFF.md`: status, architecture, the controller front-end design, and the
-  hard-won gotchas (DMA, MSI-X, command-set negotiation).
