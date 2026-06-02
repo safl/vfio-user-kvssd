@@ -68,6 +68,23 @@ I/O opcodes: STORE `0x01`, RETRIEVE `0x02`, LIST `0x06`, DELETE `0x10`,
 EXIST `0x14`. Limits: key <= 16 bytes, value <= 4096 bytes. Backing store is
 in-memory.
 
+## Identity (PCI ID / SN / NQN)
+
+The device hard-codes a single identity:
+
+| Field   | Value                                |
+|---------|--------------------------------------|
+| PCI VID/DID  | `0x1b36` / `0x0010` (Red Hat / QEMU NVMe) |
+| SN      | `VFUKVSSD0000000000000001`            |
+| MN      | `vfio-user-kvssd`                    |
+| SUBNQN  | `nqn.2025-11.dk.safl:vfu_kvssd`      |
+
+**Multi-device caveat:** attaching more than one `vfu_kvssd` instance to the
+same guest is **not supported yet**. The Linux NVMe driver de-duplicates
+controllers by Serial Number and by NVM Subsystem NQN; a second instance with
+the same SN/SUBNQN will fail to bind. Until the SN/SUBNQN become CLI knobs,
+keep the deployment to one instance per guest.
+
 ## More detail
 
 - `HANDOFF.md`: status, architecture, the controller front-end design, and the

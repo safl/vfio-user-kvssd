@@ -26,12 +26,12 @@
  * a host driver's probe sequence (e.g. SPDK) can be inspected post-mortem.
  */
 extern int nvme_trace_enabled;
-#define NVME_TRACE(fmt, ...)                                                                        \
-	do {                                                                                       \
-		if (nvme_trace_enabled) {                                                           \
-			fprintf(stderr, "kvssd[trace] " fmt "\n", ##__VA_ARGS__);                   \
-			fflush(stderr);                                                             \
-		}                                                                                  \
+#define NVME_TRACE(fmt, ...)                                                      \
+	do {                                                                      \
+		if (nvme_trace_enabled) {                                         \
+			fprintf(stderr, "kvssd[trace] " fmt "\n", ##__VA_ARGS__); \
+			fflush(stderr);                                           \
+		}                                                                 \
 	} while (0)
 
 /* Total queues including the admin queue at index 0. */

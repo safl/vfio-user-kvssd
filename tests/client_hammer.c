@@ -262,8 +262,8 @@ set_irqs_msix(int sock, int *eventfds, unsigned start, unsigned n)
 		.count = n,
 	};
 	struct iovec iov[2] = {[1] = {.iov_base = &req, .iov_len = sizeof(req)}};
-	return tran_sock_msg_iovec(sock, 5, VFIO_USER_DEVICE_SET_IRQS, iov, 2, eventfds,
-				   (int)n, NULL, NULL, 0, NULL, 0);
+	return tran_sock_msg_iovec(sock, 5, VFIO_USER_DEVICE_SET_IRQS, iov, 2, eventfds, (int)n,
+				   NULL, NULL, 0, NULL, 0);
 }
 
 /* Bring CC.EN=1 with AQA/ASQ/ACQ programmed; wait CSTS.RDY=1. */
@@ -307,8 +307,7 @@ sanity_identify(struct ctx *c, uint16_t cid)
 	asq[0].cdw10 = 0x01; /* CNS=controller */
 	reg_wr32(c->sock, DB_ASQ_TAIL, 1);
 	if ((acq[0].status & 1) != 1 || (acq[0].status >> 1) != 0) {
-		errx(EXIT_FAILURE, "sanity: bad CQE status %#x after identify",
-		     acq[0].status);
+		errx(EXIT_FAILURE, "sanity: bad CQE status %#x after identify", acq[0].status);
 	}
 	if (acq[0].cid != cid) {
 		errx(EXIT_FAILURE, "sanity: cid mismatch %u != %u", acq[0].cid, cid);
@@ -376,7 +375,8 @@ mode_dma(struct ctx *c, unsigned iters)
 	unlink(tmpl);
 
 	for (unsigned i = 0; i < iters; i++) {
-		uint64_t off = (xrand(c) % 4u) * PAGE; /* not used by device but exercises bookkeeping */
+		uint64_t off =
+			(xrand(c) % 4u) * PAGE; /* not used by device but exercises bookkeeping */
 		(void)off;
 		if (dma_map(c->sock, aux_fd, aux_base, aux_size, 0) != 0) {
 			errx(EXIT_FAILURE, "dma[%u]: map failed", i);
@@ -417,9 +417,8 @@ mode_doorbell(struct ctx *c, unsigned iters)
 		/* Drain CQEs in phase. */
 		while (head != tail) {
 			if ((acq[head].status & 1) != phase) {
-				errx(EXIT_FAILURE,
-				     "doorbell[%u]: cqe[%u].phase=%u expected %u",
-				     i, head, acq[head].status & 1, phase);
+				errx(EXIT_FAILURE, "doorbell[%u]: cqe[%u].phase=%u expected %u", i,
+				     head, acq[head].status & 1, phase);
 			}
 			if ((acq[head].status >> 1) != 0) {
 				errx(EXIT_FAILURE, "doorbell[%u]: status=%#x", i,
@@ -477,8 +476,8 @@ mode_msix(struct ctx *c, unsigned iters)
 		uint64_t val = 0;
 		ssize_t r = read(efd, &val, 8);
 		if (r != 8 || val == 0) {
-			errx(EXIT_FAILURE, "msix[%u]: eventfd not signaled (r=%zd val=%llu)",
-			     i, r, (unsigned long long)val);
+			errx(EXIT_FAILURE, "msix[%u]: eventfd not signaled (r=%zd val=%llu)", i, r,
+			     (unsigned long long)val);
 		}
 		controller_disable(c->sock);
 		if (device_reset(c->sock) != 0) {
@@ -509,8 +508,7 @@ mode_config(struct ctx *c, unsigned iters)
 		(void)access_region(c->sock, VFU_PCI_DEV_CFG_REGION_IDX, false, 0, cfg,
 				    sizeof(cfg));
 		/* BAR sizing trick on BAR0: write all-ones, read back, restore. */
-		uint32_t bar_save = cfg[PCI_BASE_ADDRESS_0] |
-				    (cfg[PCI_BASE_ADDRESS_0 + 1] << 8) |
+		uint32_t bar_save = cfg[PCI_BASE_ADDRESS_0] | (cfg[PCI_BASE_ADDRESS_0 + 1] << 8) |
 				    (cfg[PCI_BASE_ADDRESS_0 + 2] << 16) |
 				    (cfg[PCI_BASE_ADDRESS_0 + 3] << 24);
 		uint32_t ones = 0xffffffffu;
@@ -587,8 +585,8 @@ submit_drain_admin(struct ctx *c, NvmeSqe *asq, NvmeCqe *acq, uint16_t *head_io,
 	reg_wr32(c->sock, DB_ASQ_TAIL, tail);
 	uint16_t status = acq[head].status;
 	if ((status & 1) != phase) {
-		errx(EXIT_FAILURE, "submit_drain: cqe[%u].phase=%u expected %u status=%#x",
-		     head, status & 1, phase, status);
+		errx(EXIT_FAILURE, "submit_drain: cqe[%u].phase=%u expected %u status=%#x", head,
+		     status & 1, phase, status);
 	}
 	*head_io = tail;
 	if (tail == 0) {
@@ -833,12 +831,9 @@ main(int argc, char **argv)
 	int opt;
 
 	static const struct option longopts[] = {
-		{"mode", required_argument, 0, 'm'},
-		{"iters", required_argument, 0, 'i'},
-		{"seed", required_argument, 0, 's'},
-		{"quiet", no_argument, 0, 'q'},
-		{"help", no_argument, 0, 'h'},
-		{0, 0, 0, 0},
+		{"mode", required_argument, 0, 'm'}, {"iters", required_argument, 0, 'i'},
+		{"seed", required_argument, 0, 's'}, {"quiet", no_argument, 0, 'q'},
+		{"help", no_argument, 0, 'h'},       {0, 0, 0, 0},
 	};
 
 	while ((opt = getopt_long(argc, argv, "m:i:s:qh", longopts, NULL)) != -1) {
@@ -890,8 +885,8 @@ main(int argc, char **argv)
 	}
 
 	if (c.verbose) {
-		printf("hammer: socket=%s mode=%s iters=%u seed=%u\n",
-		       g_sock_path, mode_name, iters, seed);
+		printf("hammer: socket=%s mode=%s iters=%u seed=%u\n", g_sock_path, mode_name,
+		       iters, seed);
 	}
 
 	struct timespec t0, t1;

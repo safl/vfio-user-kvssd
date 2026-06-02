@@ -192,8 +192,9 @@ nvme_prp_xfer(vfu_ctx_t *vfu, uint64_t prp1, uint64_t prp2, void *buf, size_t le
 			/* TODO: PRP lists / chaining. Prototype transfers (KV
 			 * values and identify pages) are at most two pages; the
 			 * controller advertises MDTS accordingly. */
-			NVME_TRACE("prp_xfer: UNSUPPORTED >2-page transfer len=%zu (needs PRP list)",
-				   len);
+			NVME_TRACE(
+				"prp_xfer: UNSUPPORTED >2-page transfer len=%zu (needs PRP list)",
+				len);
 			goto out;
 		}
 		r = vfu_addr_to_sgl(vfu, (vfu_dma_addr_t)(uintptr_t)prp2, remaining,
@@ -256,24 +257,90 @@ nvme_post_cqe(struct nvme_ctrl *n, uint16_t cqid, uint16_t sqid, uint16_t sq_hea
 /* Admin commands                                                             */
 /* -------------------------------------------------------------------------- */
 
+/* Pad an ASCII identification string to a fixed width with spaces (no NUL).
+ * NVMe SN/MN/FR are space-padded ASCII; many hosts trim trailing spaces. */
+static void
+nvme_fill_ascii(uint8_t *dst, const char *s, size_t width)
+{
+	size_t n = 0;
+	while (n < width && s[n] != '\0') {
+		dst[n] = (uint8_t)s[n];
+		n++;
+	}
+	while (n < width) {
+		dst[n++] = ' ';
+	}
+}
+
 static void
 nvme_fill_id_ctrl(uint8_t *buf)
 {
 	memset(buf, 0, KVSSD_PAGE_SIZE);
 
-	buf[0x00] = 0x1d; /* VID */
-	buf[0x01] = 0x1d;
-	memcpy(buf + 0x04, "KVSSD0000000000000001", 20); /* SN  */
-	memcpy(buf + 0x18, "vfio-user-kvssd", 15);       /* MN  */
-	memcpy(buf + 0x40, "0.1     ", 8);               /* FR  */
-	buf[0x4d] = 0x01;                                /* MDTS = 2 pages */
-	buf[0x50] = 0x00;                                /* VER 2.0.0 */
+	/* Bytes 0-255: Controller Capabilities and Features. */
+	buf[0x00] = 0x36; /* VID = 0x1b36 (Red Hat / QEMU). Matches the PCI ID
+			   * vfu_pci_set_id() advertises; keeping it in sync
+			   * avoids host quirk tables tripping on a mismatch. */
+	buf[0x01] = 0x1b;
+	buf[0x02] = 0x36; /* SSVID = 0x1b36 */
+	buf[0x03] = 0x1b;
+	nvme_fill_ascii(buf + 0x04, "VFUKVSSD0000000000000001", 20); /* SN */
+	nvme_fill_ascii(buf + 0x18, "vfio-user-kvssd", 40);          /* MN */
+	nvme_fill_ascii(buf + 0x40, "0.1.3", 8);                     /* FR */
+	buf[0x48] = 0x00;                                            /* RAB: no preference */
+	/* IEEE OUI (0x49-0x4B) left as zeros: vendor-assigned only. */
+	buf[0x4c] = 0x00; /* CMIC: not multi-path, no SR-IOV */
+	buf[0x4d] = 0x01; /* MDTS: 1 page (2^MDTS * CAP.MPSMIN), small + safe */
+	buf[0x4e] = 0x01; /* CNTLID lo = 1 */
+	buf[0x4f] = 0x00; /* CNTLID hi */
+	buf[0x50] = 0x00; /* VER = 2.0.0 (matches CAP) */
 	buf[0x51] = 0x00;
 	buf[0x52] = 0x02;
 	buf[0x53] = 0x00;
-	buf[0x200] = 0x66; /* SQES: min/max 64B */
-	buf[0x201] = 0x44; /* CQES: min/max 16B */
+	/* RTD3R / RTD3E (0x54-0x5B) = 0: not advertised. */
+	/* OAES (0x5C-0x5F) = 0: no async event sources beyond the spec
+	 * defaults (every controller signals namespace-attribute-changed). */
+	/* CTRATT (0x60-0x63) = 0: no controller attributes claimed. */
+	buf[0x6f] = 0x01; /* CNTRLTYPE = I/O controller. Mandatory NVMe >=1.4;
+			   * Linux nvme-core bails on EINVAL without it. */
+
+	/* Bytes 256-511: Admin Command Set Attributes. */
+	buf[0x100] = 0x00; /* OACS lo: no optional admin commands */
+	buf[0x101] = 0x00;
+	buf[0x102] = 0x03; /* ACL = 3 (=> 4 concurrent aborts), spec minimum */
+	buf[0x103] = 0x03; /* AERL = 3 (=> 4 outstanding AERs) */
+	buf[0x104] = 0x00; /* FRMW: no firmware download */
+	buf[0x105] = 0x00; /* LPA: only the spec-mandatory log pages */
+	buf[0x106] = 0x00; /* ELPE = 0 (=> 1 error log entry retained) */
+	buf[0x107] = 0x00; /* NPSS = 0 (=> 1 power state) */
+	buf[0x108] = 0x00; /* AVSCC: vendor-specific format not advertised */
+	buf[0x109] = 0x00; /* APSTA: no autonomous power-state transition */
+	/* WCTEMP / CCTEMP (0x10A-0x10D) = 0: no thermal sensors. */
+	/* KAS (0x140-0x141) = 0: keep-alive optional for PCIe, not advertised. */
+
+	/* Bytes 512-3071: NVM Command Set Attributes. */
+	buf[0x200] = 0x66; /* SQES: min=max=64B (2^6) */
+	buf[0x201] = 0x44; /* CQES: min=max=16B (2^4) */
+	buf[0x202] = 0x40; /* MAXCMD lo = 64 outstanding commands per queue */
+	buf[0x203] = 0x00;
 	buf[0x204] = 0x01; /* NN = 1 */
+	buf[0x205] = 0x00;
+	buf[0x206] = 0x00;
+	buf[0x207] = 0x00;
+	/* ONCS / FUSES / FNA / VWC / AWUN / AWUPF (0x208-0x20D) left 0:
+	 * no optional NVM commands, no fused ops, no volatile write cache. */
+
+	/* SUBNQN (0x300-0x3FF): NVMe 1.4+ requires a non-empty UTF-8 NQN.
+	 * Linux nvme-core treats a zero-length SUBNQN as a protocol error
+	 * and refuses to bind. Format follows the spec recommended pattern. */
+	{
+		const char *nqn = "nqn.2025-11.dk.safl:vfu_kvssd";
+		size_t i;
+		for (i = 0; i < 256 && nqn[i] != '\0'; i++) {
+			buf[0x300 + i] = (uint8_t)nqn[i];
+		}
+		/* trailing bytes already zero from memset */
+	}
 }
 
 static uint16_t
@@ -292,15 +359,29 @@ nvme_admin_identify(struct nvme_ctrl *n, const NvmeSqe *sqe)
 		nvme_fill_id_ctrl(buf);
 		break;
 	case NVME_ID_CNS_NS: {
-		/* NVM Identify Namespace for a KV namespace: most fields are zero,
-		 * but populate NSZE (offset 0) and NCAP (offset 8) with the KV
-		 * namespace size. SPDK's spdk_nvme_ns_is_active() treats any NS
-		 * with NCAP=0 as inactive and detaches the controller, which made
-		 * KV-via-SPDK fail with ENXIO. libvfn doesn't gate on NCAP, so it
-		 * was unaffected. */
+		/* NVM Identify Namespace for a KV namespace.
+		 *
+		 * Mandatory fields a conforming host driver inspects:
+		 *   NSZE  (0..7)   namespace size in logical blocks
+		 *   NCAP  (8..15)  namespace capacity (active blocks)
+		 *   NUSE  (16..23) blocks currently in use
+		 *   NVMCAP (48..63) NVM capacity in bytes (128-bit)
+		 *
+		 * The KV namespace doesn't have logical blocks, so NSZE/NCAP/NUSE
+		 * are advertised in byte units of (key + value) slot footprint.
+		 * The spec allows that; what matters is NCAP != 0 (SPDK's
+		 * spdk_nvme_ns_is_active() gate) and NUSE <= NCAP. The rest of
+		 * the NVM-specific fields (FLBAS, LBAF, MC, DPC, ...) stay zero;
+		 * NLBAF=0 advertises "no LBA formats" which is consistent with
+		 * a non-block namespace. */
 		uint64_t nsze = n->ns.id_ns_kv ? n->ns.id_ns_kv->nsze : 0;
-		memcpy(buf + 0, &nsze, sizeof(nsze));
-		memcpy(buf + 8, &nsze, sizeof(nsze));
+		uint64_t nuse = n->ns.id_ns_kv ? n->ns.id_ns_kv->nuse : 0;
+
+		memcpy(buf + 0x00, &nsze, sizeof(nsze)); /* NSZE */
+		memcpy(buf + 0x08, &nsze, sizeof(nsze)); /* NCAP */
+		memcpy(buf + 0x10, &nuse, sizeof(nuse)); /* NUSE */
+		/* NVMCAP is a 128-bit byte count; low 64 bits = nsze, high 0. */
+		memcpy(buf + 0x30, &nsze, sizeof(nsze));
 		break;
 	}
 	case NVME_ID_CNS_NS_ACTIVE_LIST: {
@@ -557,8 +638,8 @@ nvme_process_sq(struct nvme_ctrl *n, uint16_t qid)
 		sq->head = (uint16_t)((sq->head + 1) % sq->size);
 
 		status = (qid == 0) ? nvme_admin_cmd(n, &sqe, &cdw0) : nvme_io_kv(n, &sqe);
-		NVME_TRACE("%s q%u opc=0x%02x cid=%u -> status=0x%04x", qid == 0 ? "adm" : "io", qid,
-			   sqe.opcode, sqe.cid, status);
+		NVME_TRACE("%s q%u opc=0x%02x cid=%u -> status=0x%04x", qid == 0 ? "adm" : "io",
+			   qid, sqe.opcode, sqe.cid, status);
 		if (status == NVME_NO_COMPLETE) {
 			continue;
 		}
