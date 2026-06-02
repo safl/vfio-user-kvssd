@@ -133,7 +133,10 @@ main(int argc, char **argv)
 		perror("vfu_pci_init");
 		goto err;
 	}
-	vfu_pci_set_id(vfu, 0x1d1d, 0x1f1f, 0, 0);
+	/* Red Hat / QEMU NVMe PCI ID. The earlier CNEX Labs id (0x1d1d, 0x1f1f)
+	 * triggered SPDK's built-in OCSSD quirk, so SPDK opened the device as an
+	 * Open-Channel SSD and KV namespace operations failed with ENXIO. */
+	vfu_pci_set_id(vfu, 0x1b36, 0x0010, 0, 0);
 
 	/* PCI class code: mass storage / NVM / NVMe programming interface. */
 	cfg = (uint8_t *)vfu_pci_get_config_space(vfu);
