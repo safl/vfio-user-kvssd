@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <time.h>
 
 #include "nvme.h"
 
@@ -59,6 +60,25 @@
 #define NVME_STATUS_INVALID_QID 0x0101 /* SCT command-specific, SC 0x01 */
 
 int nvme_trace_enabled;
+
+/* Monotonic microseconds since the first call. CLOCK_MONOTONIC is unaffected
+ * by NTP slews and wall-clock jumps, so successive deltas are meaningful. */
+uint64_t
+nvme_trace_us(void)
+{
+	static uint64_t origin_us;
+	struct timespec ts;
+	uint64_t now;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+		return 0;
+	}
+	now = (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000ull;
+	if (origin_us == 0) {
+		origin_us = now;
+	}
+	return now - origin_us;
+}
 
 int
 nvme_ctrl_init(struct nvme_ctrl *n, vfu_ctx_t *vfu, uint32_t max_num_keys)

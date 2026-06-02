@@ -9,8 +9,10 @@
 #ifndef KVSSD_NVME_H
 #define KVSSD_NVME_H
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -24,12 +26,20 @@
  * the VFU_KVSSD_TRACE environment variable is set (any value). Output goes to
  * stderr, which the launcher redirects to <socket>.log; CI bundles that file so
  * a host driver's probe sequence (e.g. SPDK) can be inspected post-mortem.
+ *
+ * Each line carries a monotonic-clock timestamp in microseconds since the
+ * first NVME_TRACE() call. That lets a reader spot latency outliers between
+ * adjacent operations, useful for diagnosing probe-time races where SPDK
+ * occasionally skips the device.
  */
 extern int nvme_trace_enabled;
+uint64_t
+nvme_trace_us(void);
 #define NVME_TRACE(fmt, ...)                                                      \
 	do {                                                                      \
 		if (nvme_trace_enabled) {                                         \
-			fprintf(stderr, "kvssd[trace] " fmt "\n", ##__VA_ARGS__); \
+			fprintf(stderr, "kvssd[trace +%9" PRIu64 "us] " fmt "\n", \
+				nvme_trace_us(), ##__VA_ARGS__);                  \
 			fflush(stderr);                                           \
 		}                                                                 \
 	} while (0)
