@@ -53,7 +53,7 @@ steps:
       \ -C builddir && sudo meson install -C builddir && sudo ldconfig"
 
 - name: env_check
-  # Verify the controller (vendor 1d1d:1f1f) enumerated, then a driver
+  # Verify the controller (Red Hat / QEMU NVMe 1b36:0010) enumerated, then a driver
   # attach/detach cycle with devbind (preinstalled in the nosi guest): detach
   # binds it to uio_pci_generic so /dev/ng0n1 disappears; re-bind nvme brings
   # it back -- confirming the device survives controller disable/re-enable.
@@ -62,13 +62,13 @@ steps:
     transport: ssh
     commands:
     - "lspci -nn"
-    - "lspci -d 1d1d:1f1f -nn | grep -qi . || { echo 'ERROR: vfu_kvssd not on PCI bus'; exit 1; }"
+    - "lspci -d 1b36:0010 -nn | grep -qi . || { echo 'ERROR: vfu_kvssd not on PCI bus'; exit 1; }"
     - "sudo nvme list || true"
     - "ls -l /dev/ng0n1"
     - "sudo devbind --list"
     - |
       set -eu
-      bdf=$(lspci -d 1d1d:1f1f -D | awk '{print $1}')
+      bdf=$(lspci -d 1b36:0010 -D | awk '{print $1}')
       echo "device: $bdf"
       sudo modprobe uio_pci_generic || true
       echo "## detach: bind $bdf -> uio_pci_generic"
