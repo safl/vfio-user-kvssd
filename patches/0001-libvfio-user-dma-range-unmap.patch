@@ -1,0 +1,108 @@
+diff --git a/lib/dma.c b/lib/dma.c
+index 724c170..c1ab707 100644
+--- a/lib/dma.c
++++ b/lib/dma.c
+@@ -167,7 +167,30 @@ MOCK_DEFINE(dma_controller_unmap_region)(dma_controller_t *dma,
+     assert(err == 0);
+ }
+ 
+-/* FIXME not thread safe */
++/*
++ * Unregister every region that overlaps with [dma_addr, dma_addr+size).
++ *
++ * The vfio-user protocol defaults DMA_UNMAP semantics to the kernel
++ * VFIO_IOMMU_UNMAP_DMA behaviour, which removes (or splits) every mapping
++ * fully or partially contained in the supplied range. The previous
++ * implementation required an exact (addr, size) match against a single
++ * registered region and returned ENOENT otherwise, which deviated from the
++ * spec and silently leaked fine-grained mappings whenever a client coalesced
++ * UNMAPs across them -- e.g. QEMU emitting one DMA_MAP per 4 KiB guest page
++ * under intel-iommu caching-mode and then a single coarse DMA_UNMAP. The
++ * leaked mappings later collided with fresh MAPs at the same iova range
++ * (EINVAL "overlaps with DMA region"), wedging userspace drivers that
++ * unbind/rebind across the same controller (SPDK, xNVMe upcie).
++ *
++ * Regions that partially overlap the unmap range (start before dma_addr or
++ * end after dma_addr+size) are removed in their entirety. Splitting such
++ * regions matches the kernel implementation more closely but requires
++ * recomputing the mmap offset/length and re-mapping the surviving slice; no
++ * vfio-user client observed so far emits a partial-overlap UNMAP, so the
++ * simpler "remove entirely and warn" path is sufficient.
++ *
++ * FIXME not thread safe.
++ */
+ int
+ MOCK_DEFINE(dma_controller_remove_region)(dma_controller_t *dma,
+                                           vfu_dma_addr_t dma_addr, size_t size,
+@@ -176,36 +199,52 @@ MOCK_DEFINE(dma_controller_remove_region)(dma_controller_t *dma,
+ {
+     dma_memory_region_t *region;
+     btree_iter_t iter;
++    uintptr_t unmap_end;
++    size_t removed = 0;
+ 
+     assert(dma != NULL);
+ 
++    unmap_end = (uintptr_t)dma_addr + size;
++
+     btree_iter_init(&dma->regions, (uintptr_t)dma_addr, &iter);
+-    region = btree_iter_get(&iter, NULL);
+-    if (region == NULL) {
+-        return ERROR_INT(ENOENT);
+-    }
++    while ((region = btree_iter_get(&iter, NULL)) != NULL) {
++        uintptr_t r_start = (uintptr_t)region->info.iova.iov_base;
++        uintptr_t r_end = r_start + region->info.iova.iov_len;
+ 
+-    if (region->info.iova.iov_base != dma_addr ||
+-        region->info.iova.iov_len != size) {
+-        return ERROR_INT(ENOENT);
+-    }
++        if (r_start >= unmap_end) {
++            break;
++        }
++
++        if (r_start < (uintptr_t)dma_addr || r_end > unmap_end) {
++            vfu_log(dma->vfu_ctx, LOG_WARNING,
++                    "DMA unmap [%p, %p) partially overlaps region [%p, %p); "
++                    "removing entire region (splitting not implemented)",
++                    dma_addr, (void *)unmap_end,
++                    region->info.iova.iov_base, (void *)r_end);
++        }
+ 
+-    if (dma_unregister != NULL) {
+-        dma->vfu_ctx->in_cb = CB_DMA_UNREGISTER;
+-        dma_unregister(data, &region->info);
+-        dma->vfu_ctx->in_cb = CB_NONE;
++        if (dma_unregister != NULL) {
++            dma->vfu_ctx->in_cb = CB_DMA_UNREGISTER;
++            dma_unregister(data, &region->info);
++            dma->vfu_ctx->in_cb = CB_NONE;
++        }
++
++        if (region->info.vaddr != NULL) {
++            dma_controller_unmap_region(dma, region);
++        } else {
++            assert(region->fd == -1);
++        }
++
++        btree_iter_remove(&iter);
++        free(region);
++        removed++;
+     }
+ 
+-    if (region->info.vaddr != NULL) {
+-        dma_controller_unmap_region(dma, region);
+-    } else {
+-        assert(region->fd == -1);
++    if (removed == 0) {
++        return ERROR_INT(ENOENT);
+     }
+ 
+-    btree_iter_remove(&iter);
+     dma_controller_increment_regions_generation(dma);
+-    free(region);
+-
+     return 0;
+ }
+ 

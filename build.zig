@@ -86,6 +86,13 @@ pub fn build(b: *std.Build) void {
     const version = b.option([]const u8, "version",
         "Version string reported by --version") orelse zon.version;
 
+    // Local fixes to the embedded libvfio-user live in patches/ and are
+    // re-applied on every build. The script is idempotent (skips patches
+    // already present in the submodule tree), so iterative rebuilds are
+    // harmless. Every executable below adds this as a build dependency so
+    // the patched sources are guaranteed to exist before compilation.
+    const apply_patches = b.addSystemCommand(&.{ "bash", "patches/apply.sh" });
+
     // The kvssd device. Strip in release builds (zig strips cross-arch).
     const kvssd_mod = b.createModule(.{
         .target = target,
@@ -103,6 +110,7 @@ pub fn build(b: *std.Build) void {
     kvssd_mod.addCMacro("VFU_KVSSD_VERSION", b.fmt("\"{s}\"", .{version}));
     const kvssd = b.addExecutable(.{ .name = "vfu_kvssd", .root_module = kvssd_mod });
     if (want_static) kvssd.linkage = .static;
+    kvssd.step.dependOn(&apply_patches.step);
     b.installArtifact(kvssd);
 
     // NVMe-aware vfio-user client harness (drives the device without QEMU).
@@ -119,6 +127,7 @@ pub fn build(b: *std.Build) void {
     });
     const harness = b.addExecutable(.{ .name = "vfu_kvssd_harness", .root_module = harness_mod });
     if (want_static) harness.linkage = .static;
+    harness.step.dependOn(&apply_patches.step);
     b.installArtifact(harness);
 
     // Stress hammer: drives the device's state machine the same way Linux +
@@ -137,6 +146,7 @@ pub fn build(b: *std.Build) void {
     });
     const hammer = b.addExecutable(.{ .name = "vfu_kvssd_hammer", .root_module = hammer_mod });
     if (want_static) hammer.linkage = .static;
+    hammer.step.dependOn(&apply_patches.step);
     b.installArtifact(hammer);
 
     // KV handler unit test (no libvfio-user dependency).
