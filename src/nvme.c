@@ -291,9 +291,18 @@ nvme_admin_identify(struct nvme_ctrl *n, const NvmeSqe *sqe)
 	case NVME_ID_CNS_CTRL:
 		nvme_fill_id_ctrl(buf);
 		break;
-	case NVME_ID_CNS_NS:
-		/* NVM Identify Namespace for a KV namespace: zeros. */
+	case NVME_ID_CNS_NS: {
+		/* NVM Identify Namespace for a KV namespace: most fields are zero,
+		 * but populate NSZE (offset 0) and NCAP (offset 8) with the KV
+		 * namespace size. SPDK's spdk_nvme_ns_is_active() treats any NS
+		 * with NCAP=0 as inactive and detaches the controller, which made
+		 * KV-via-SPDK fail with ENXIO. libvfn doesn't gate on NCAP, so it
+		 * was unaffected. */
+		uint64_t nsze = n->ns.id_ns_kv ? n->ns.id_ns_kv->nsze : 0;
+		memcpy(buf + 0, &nsze, sizeof(nsze));
+		memcpy(buf + 8, &nsze, sizeof(nsze));
 		break;
+	}
 	case NVME_ID_CNS_NS_ACTIVE_LIST: {
 		uint32_t *list = (uint32_t *)buf;
 		list[0] = 1; /* nsid 1 */
