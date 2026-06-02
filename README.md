@@ -15,18 +15,19 @@ a userspace process behind a vfio-user interface. Any vfio-user client
 can drive it (the bundled `tests/` harness does so directly for unit
 testing without QEMU in the loop).
 
-A most useful client is **stock upstream QEMU (>= 10.1)**: attach
-`vfu_kvssd` to it over a vfio-user socket and the guest operating system
-sees an NVMe 2.0 controller with the KV Command Set, virtually
-indistinguishable from a physical NVMe KV SSD.
+However, where it gets super useful is in concert with the vfio-user
+client support in **stock upstream QEMU (>= 10.1)**: attach `vfu_kvssd`
+over a vfio-user socket and the guest operating system sees an NVMe 2.0
+controller with the KV Command Set, virtually indistinguishable from a
+physical NVMe KV SSD.
 
 It exists so the xNVMe CI can drop its dependency on the outdated
 `SamsungDS/qemu` fork (the only QEMU build that carried KV support). With
 `vfu_kvssd` xNVMe runs against latest stock QEMU; everything non-upstream
 lives in this self-contained external process.
 
-Written in C, built with **Zig** as the only toolchain, and shipped as a
-single static x86_64/arm64 binary with no runtime dependencies.
+Written in C, built with Zig, and shipped as a standalone static
+x86_64/arm64 binary with no runtime dependencies.
 
 ## Quick start
 
