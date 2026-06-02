@@ -27,7 +27,7 @@ steps:
     #    uio_pci_generic, run on the PCIe BDF, then restore the kernel driver.
     - |
       set -eu
-      bdf=$(lspci -d 1d1d:1f1f -D | awk '{print $1}')
+      bdf=$(lspci -d 1b36:0010 -D | awk '{print $1}')
       echo "device: $bdf"
       sudo sysctl -w vm.nr_hugepages=512
       sudo modprobe uio_pci_generic || true
