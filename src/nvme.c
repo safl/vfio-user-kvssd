@@ -321,8 +321,11 @@ nvme_fill_id_ctrl(uint8_t *buf)
 	/* Bytes 512-3071: NVM Command Set Attributes. */
 	buf[0x200] = 0x66; /* SQES: min=max=64B (2^6) */
 	buf[0x201] = 0x44; /* CQES: min=max=16B (2^4) */
-	buf[0x202] = 0x40; /* MAXCMD lo = 64 outstanding commands per queue */
-	buf[0x203] = 0x00;
+	/* MAXCMD (0x202-0x203) = 0: do not advertise a cap. The previous
+	 * non-zero value was speculative; libvfio-user serialises requests
+	 * per connection and the practical limit is the host queue depth
+	 * (CAP.MQES). Advertising a tight MAXCMD could cause hosts to throttle
+	 * for no reason and interact badly with timing-sensitive probe code. */
 	buf[0x204] = 0x01; /* NN = 1 */
 	buf[0x205] = 0x00;
 	buf[0x206] = 0x00;
