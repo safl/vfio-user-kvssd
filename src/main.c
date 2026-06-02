@@ -262,6 +262,13 @@ main(int argc, char **argv)
 
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
+
+	/* Identify the running binary in the trace log so artifact post-mortems
+	 * never have to guess which version produced a given run. Goes to
+	 * stderr because that's the stream CI captures into vfu_kvssd.log. */
+	fprintf(stderr, "kvssd: vfu_kvssd %s, socket %s, capacity %llu B\n", VFU_KVSSD_VERSION,
+		sock, (unsigned long long)capacity);
+	fflush(stderr);
 	printf("kvssd: listening on %s\n", sock);
 	fflush(stdout);
 

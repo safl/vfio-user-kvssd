@@ -770,6 +770,16 @@ nvme_reg_read(struct nvme_ctrl *n, size_t offset, char *buf, size_t count)
 	} else {
 		memset(buf, 0, count);
 	}
+
+	/* Trace CC/CSTS reads so a post-mortem can see what the host driver
+	 * is polling for and why it gives up. Other registers (CAP/VS/AQA/
+	 * ASQ/ACQ) are read once during init and uninteresting; suppress
+	 * them to keep the log compact. */
+	if (offset == NVME_REG_CC) {
+		NVME_TRACE("CC read: 0x%x", n->cc);
+	} else if (offset == NVME_REG_CSTS) {
+		NVME_TRACE("CSTS read: 0x%x", n->csts);
+	}
 }
 
 static void
