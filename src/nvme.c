@@ -700,14 +700,29 @@ nvme_enable(struct nvme_ctrl *n)
 		   n->csts);
 }
 
+/* Tear the I/O queues down without touching CSTS. Used by both Controller
+ * Reset (CC.EN 1->0) and Shutdown Notification (CC.SHN 0->non-zero). The
+ * two paths differ in how they update CSTS, so the CSTS bookkeeping is
+ * handled by their respective callers, not in here.
+ */
 static void
-nvme_disable(struct nvme_ctrl *n)
+nvme_queues_down(struct nvme_ctrl *n)
 {
 	for (int i = 0; i < NVME_MAX_QUEUES; i++) {
 		n->sq[i].enabled = false;
 		n->cq[i].enabled = false;
 	}
-	n->csts &= ~NVME_CSTS_RDY;
+}
+
+/* Controller Reset (CC.EN 1->0): per NVMe 2.0 spec section 3.7, transient
+ * controller state is reset. Clear CSTS.RDY and CSTS.SHST so a probe that
+ * follows sees a clean register file; CC itself is preserved (the host
+ * decides when to re-enable). */
+static void
+nvme_disable(struct nvme_ctrl *n)
+{
+	nvme_queues_down(n);
+	n->csts &= ~(NVME_CSTS_RDY | NVME_CSTS_SHST_MASK);
 
 	NVME_TRACE("disable: all queues down -> csts=0x%x", n->csts);
 }
@@ -807,23 +822,25 @@ nvme_reg_write(struct nvme_ctrl *n, size_t offset, const char *buf, size_t count
 			nvme_disable(n);
 		}
 		/*
-		 * Shutdown notification (CC.SHN != 0): tear the queues down and report
-		 * SHST=complete so the host's controller-shutdown wait returns instead
-		 * of timing out (~10s) and aborting -- a stuck shutdown wedges the
-		 * controller across the driver unbind that the tests do every case.
+		 * Shutdown Notification: act only on CC.SHN transitions, not on
+		 * every CC write that happens to carry SHN set. SPDK does
+		 * read-modify-write on CC during the shutdown polling phase
+		 * (writing the same value back), and re-running this branch on
+		 * those preserved-SHN writes would tear the queues down and
+		 * clobber CSTS again on what is effectively a no-op.
+		 *
+		 * CSTS.RDY is intentionally left alone here: per spec, RDY only
+		 * clears on Controller Reset (CC.EN 1->0). QEMU's emulated NVMe
+		 * does the same, and SPDK's reset state machine refuses to
+		 * recover a controller that sits at RDY=0 + EN=1, which is what
+		 * vfu_kvssd used to produce -- it wedged every probe that
+		 * inherited stale shutdown state from a prior driver.
 		 */
-		if (shn) {
-			nvme_disable(n);
+		if (shn && !old_shn) {
+			nvme_queues_down(n);
 			n->csts = (n->csts & ~NVME_CSTS_SHST_MASK) | NVME_CSTS_SHST_COMPLETE;
 			NVME_TRACE("shutdown: SHST=complete (csts=0x%x)", n->csts);
-		} else if (old_shn) {
-			/*
-			 * CC.SHN transition 1->0 (host cleared the shutdown
-			 * notification). Per NVMe spec, CSTS.SHST must return
-			 * to NORMAL so the next probe sees a clean controller.
-			 * Leaving it at COMPLETE made SPDK's re-init wedge in
-			 * an "always shutting down" wait loop.
-			 */
+		} else if (!shn && old_shn) {
 			n->csts &= ~NVME_CSTS_SHST_MASK;
 			NVME_TRACE("shutdown cleared: SHST=normal (csts=0x%x)", n->csts);
 		}
