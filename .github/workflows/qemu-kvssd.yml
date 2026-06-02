@@ -9,6 +9,9 @@ name: qemu-kvssd
 # under nested KVM on GHA with --privileged. No QEMU build here.
 on:
   workflow_dispatch:
+  # Reusable: release.yml gates publication on this passing for the tag SHA,
+  # so a regression like a stale PCI ID in the env_check can't ship.
+  workflow_call:
   push:
     branches: [main]
     paths:

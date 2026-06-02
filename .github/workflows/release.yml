@@ -15,7 +15,14 @@ env:
   ZIG_VERSION: "0.16.0"
 
 jobs:
+  # Run the end-to-end QEMU bring-up against the tagged commit before any
+  # artifact ships, so a regression in the device path cannot land in a
+  # published release.
+  qemu-kvssd:
+    uses: ./.github/workflows/qemu-kvssd.yml
+
   release:
+    needs: qemu-kvssd
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
