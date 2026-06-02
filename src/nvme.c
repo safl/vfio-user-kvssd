@@ -787,6 +787,7 @@ nvme_reg_write(struct nvme_ctrl *n, size_t offset, const char *buf, size_t count
 	case NVME_REG_CC: {
 		uint32_t old = n->cc;
 		uint32_t shn = (uint32_t)v & NVME_CC_SHN_MASK;
+		uint32_t old_shn = old & NVME_CC_SHN_MASK;
 		n->cc = (uint32_t)v;
 		NVME_TRACE("CC write: 0x%x -> 0x%x (en %u->%u shn=%u)", old, n->cc,
 			   old & NVME_CC_EN, n->cc & NVME_CC_EN, shn >> NVME_CC_SHN_SHIFT);
@@ -805,6 +806,16 @@ nvme_reg_write(struct nvme_ctrl *n, size_t offset, const char *buf, size_t count
 			nvme_disable(n);
 			n->csts = (n->csts & ~NVME_CSTS_SHST_MASK) | NVME_CSTS_SHST_COMPLETE;
 			NVME_TRACE("shutdown: SHST=complete (csts=0x%x)", n->csts);
+		} else if (old_shn) {
+			/*
+			 * CC.SHN transition 1->0 (host cleared the shutdown
+			 * notification). Per NVMe spec, CSTS.SHST must return
+			 * to NORMAL so the next probe sees a clean controller.
+			 * Leaving it at COMPLETE made SPDK's re-init wedge in
+			 * an "always shutting down" wait loop.
+			 */
+			n->csts &= ~NVME_CSTS_SHST_MASK;
+			NVME_TRACE("shutdown cleared: SHST=normal (csts=0x%x)", n->csts);
 		}
 		break;
 	}
