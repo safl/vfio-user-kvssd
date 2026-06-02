@@ -1,6 +1,6 @@
 .{
     .name = .vfu_kvssd,
-    .version = "0.1.1",
+    .version = "0.1.2",
     .fingerprint = 0x8870a202bf0f8c29,
     // Toolchain-only project (C built with Zig). Zig is pre-1.0 and breaks
     // across minors, so pin the toolchain: the build runner checks this before
