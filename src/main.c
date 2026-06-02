@@ -28,17 +28,53 @@ on_signal(int sig)
 #define VFU_KVSSD_VERSION "unknown"
 #endif
 
+/* Default advertised capacity. Sized to roughly fit in host RAM at full load
+ * given the (key=16 + val=4096) bytes per slot the emulator carries.
+ * 2 GiB -> ~522 K slots. Override with --capacity. */
+#define VFU_KVSSD_DEFAULT_CAPACITY (2ull * 1024 * 1024 * 1024)
+
 static void
 usage(FILE *f, const char *argv0)
 {
-	fprintf(f, "usage: %s -s <socket-path>\n", argv0);
+	fprintf(f, "usage: %s -s <socket-path> [--capacity <bytes>]\n", argv0);
 	fprintf(f, "\n");
 	fprintf(f, "Emulate an NVMe Key-Value SSD over vfio-user.\n");
 	fprintf(f, "\n");
 	fprintf(f, "Options:\n");
-	fprintf(f, "  -s, --socket <path>  vfio-user UNIX socket to listen on (required)\n");
-	fprintf(f, "  -h, --help           show this help and exit\n");
-	fprintf(f, "  -V, --version        print version and exit\n");
+	fprintf(f, "  -s, --socket <path>     vfio-user UNIX socket to listen on (required)\n");
+	fprintf(f, "  -c, --capacity <bytes>  advertised namespace size; "
+		   "accepts K/M/G suffix (default: 2G)\n");
+	fprintf(f, "  -h, --help              show this help and exit\n");
+	fprintf(f, "  -V, --version           print version and exit\n");
+}
+
+/* Parse a non-negative byte-count with optional K/M/G suffix (powers of 1024). */
+static int
+parse_size(const char *s, uint64_t *out)
+{
+	char *end;
+	uint64_t n;
+
+	errno = 0;
+	n = strtoull(s, &end, 0);
+	if (errno || end == s) {
+		return -1;
+	}
+	if (*end == 'k' || *end == 'K') {
+		n *= 1024ull;
+		end++;
+	} else if (*end == 'm' || *end == 'M') {
+		n *= 1024ull * 1024;
+		end++;
+	} else if (*end == 'g' || *end == 'G') {
+		n *= 1024ull * 1024 * 1024;
+		end++;
+	}
+	if (*end != '\0') {
+		return -1;
+	}
+	*out = n;
+	return 0;
 }
 
 /*
@@ -88,6 +124,8 @@ int
 main(int argc, char **argv)
 {
 	const char *sock = NULL;
+	uint64_t capacity = VFU_KVSSD_DEFAULT_CAPACITY;
+	uint32_t max_num_keys;
 	struct nvme_ctrl ctrl;
 	vfu_ctx_t *vfu;
 	uint8_t *cfg;
@@ -95,15 +133,22 @@ main(int argc, char **argv)
 
 	static const struct option long_opts[] = {
 		{"socket", required_argument, NULL, 's'},
+		{"capacity", required_argument, NULL, 'c'},
 		{"help", no_argument, NULL, 'h'},
 		{"version", no_argument, NULL, 'V'},
 		{0, 0, 0, 0},
 	};
 
-	while ((opt = getopt_long(argc, argv, "s:hV", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "s:c:hV", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 's':
 			sock = optarg;
+			break;
+		case 'c':
+			if (parse_size(optarg, &capacity) < 0) {
+				fprintf(stderr, "invalid --capacity: %s\n", optarg);
+				return 2;
+			}
 			break;
 		case 'h':
 			usage(stdout, argv[0]);
@@ -119,6 +164,21 @@ main(int argc, char **argv)
 	if (!sock) {
 		usage(stderr, argv[0]);
 		return 2;
+	}
+
+	/* Slot footprint = key+value; cap max_num_keys at the spec ceiling. */
+	{
+		uint64_t slot = NVME_KV_MAX_KEY_SIZE + NVME_KV_MAX_VAL_SIZE;
+		uint64_t slots = capacity / slot;
+		if (slots == 0) {
+			fprintf(stderr, "--capacity must hold at least one %llu-byte slot\n",
+				(unsigned long long)slot);
+			return 2;
+		}
+		if (slots > NVME_KV_HARD_MAX_NUM_KEYS) {
+			slots = NVME_KV_HARD_MAX_NUM_KEYS;
+		}
+		max_num_keys = (uint32_t)slots;
 	}
 
 	vfu = vfu_create_ctx(VFU_TRANS_SOCK, sock, 0, &ctrl, VFU_DEV_TYPE_PCI);
@@ -190,7 +250,7 @@ main(int argc, char **argv)
 		goto err;
 	}
 
-	if (nvme_ctrl_init(&ctrl, vfu) < 0) {
+	if (nvme_ctrl_init(&ctrl, vfu, max_num_keys) < 0) {
 		fprintf(stderr, "nvme_ctrl_init failed\n");
 		goto err;
 	}

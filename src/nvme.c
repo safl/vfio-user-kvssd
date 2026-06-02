@@ -61,7 +61,7 @@
 int nvme_trace_enabled;
 
 int
-nvme_ctrl_init(struct nvme_ctrl *n, vfu_ctx_t *vfu)
+nvme_ctrl_init(struct nvme_ctrl *n, vfu_ctx_t *vfu, uint32_t max_num_keys)
 {
 	memset(n, 0, sizeof(*n));
 	n->vfu = vfu;
@@ -81,7 +81,7 @@ nvme_ctrl_init(struct nvme_ctrl *n, vfu_ctx_t *vfu)
 
 	n->vs = 0x00020000; /* NVMe 2.0.0 */
 
-	return kv_ns_init(&n->ns);
+	return kv_ns_init(&n->ns, max_num_keys);
 }
 
 void

@@ -91,7 +91,7 @@ struct nvme_ctrl {
 };
 
 int
-nvme_ctrl_init(struct nvme_ctrl *n, vfu_ctx_t *vfu);
+nvme_ctrl_init(struct nvme_ctrl *n, vfu_ctx_t *vfu, uint32_t max_num_keys);
 void
 nvme_ctrl_teardown(struct nvme_ctrl *n);
 

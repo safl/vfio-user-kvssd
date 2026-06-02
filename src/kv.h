@@ -25,6 +25,7 @@ struct kv_pair {
 struct kv_ns {
 	struct kv_pair *pairs;
 	size_t entries_allocated;
+	uint32_t max_num_keys; /* configurable capacity cap; bounds NSZE/MNK + kv_store */
 	NvmeIdNsKV *id_ns_kv;
 	uint32_t ednek; /* Error on Delete of Non-Existent Key */
 };
@@ -41,7 +42,7 @@ struct kv_dma {
 };
 
 int
-kv_ns_init(struct kv_ns *ns);
+kv_ns_init(struct kv_ns *ns, uint32_t max_num_keys);
 void
 kv_ns_teardown(struct kv_ns *ns);
 

@@ -104,8 +104,9 @@ enum {
 	NVME_CSI_ZONED = 0x02,
 };
 
-/* KV namespace limits (from the QEMU KV patch). */
-#define NVME_KV_MAX_NUM_KEYS UINT32_MAX
+/* KV namespace limits. Per-instance MAX_NUM_KEYS is configurable at runtime
+ * (see --capacity in main); the spec-level hard ceiling is UINT32_MAX. */
+#define NVME_KV_HARD_MAX_NUM_KEYS UINT32_MAX
 #define NVME_KV_MAX_KEY_SIZE 16
 #define NVME_KV_MAX_VAL_SIZE (4 * 1024)
 

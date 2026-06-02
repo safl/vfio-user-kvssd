@@ -58,7 +58,7 @@ main(void)
 	NvmeKVCmd cmd;
 	uint16_t st;
 
-	assert(kv_ns_init(&ns) == 0);
+	assert(kv_ns_init(&ns, NVME_KV_HARD_MAX_NUM_KEYS) == 0);
 
 	const char *key = "hello";
 	const char *val = "world-value-payload";

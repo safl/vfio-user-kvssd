@@ -9,7 +9,7 @@
 #define KV_INITIAL_ENTRIES 16
 
 int
-kv_ns_init(struct kv_ns *ns)
+kv_ns_init(struct kv_ns *ns, uint32_t max_num_keys)
 {
 	NvmeIdNsKV *id = calloc(1, sizeof(*id));
 	if (!id) {
@@ -23,13 +23,14 @@ kv_ns_init(struct kv_ns *ns)
 	}
 
 	ns->entries_allocated = KV_INITIAL_ENTRIES;
+	ns->max_num_keys = max_num_keys;
 	ns->ednek = 0;
 	ns->id_ns_kv = id;
 
-	id->nsze = NVME_KV_MAX_NUM_KEYS * (uint64_t)(NVME_KV_MAX_KEY_SIZE + NVME_KV_MAX_VAL_SIZE);
+	id->nsze = (uint64_t)max_num_keys * (NVME_KV_MAX_KEY_SIZE + NVME_KV_MAX_VAL_SIZE);
 	id->nuse = 0;
 	id->nkvf = 1;
-	id->kvf[0].mnk = NVME_KV_MAX_NUM_KEYS;
+	id->kvf[0].mnk = max_num_keys;
 	id->kvf[0].kml = NVME_KV_MAX_KEY_SIZE;
 	id->kvf[0].vml = NVME_KV_MAX_VAL_SIZE;
 
@@ -106,6 +107,13 @@ kv_store(struct kv_ns *ns, const NvmeKVCmd *cmd, struct kv_dma *dma)
 
 	if (cmd->cdw11.ro & NVME_CMD_KV_STORE_OPT_DONT_STORE_IF_KEY_NOT_EXISTS) {
 		return NVME_KV_KEY_NOT_EXISTS;
+	}
+
+	/* New-key insert: refuse when the namespace's advertised capacity
+	 * (max_num_keys, exposed as NSZE/MNK) has been reached. */
+	if ((ns->id_ns_kv->nuse / (NVME_KV_MAX_KEY_SIZE + NVME_KV_MAX_VAL_SIZE)) >=
+	    ns->max_num_keys) {
+		return NVME_CAP_EXCEEDED;
 	}
 
 	if (fst_empty < 0) {
