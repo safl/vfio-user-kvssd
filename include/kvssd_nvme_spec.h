@@ -83,16 +83,24 @@ enum {
 	NVME_CMD_KV_STORE_OPT_COMPRESS = 1 << 2,
 };
 
-/* Generic + KV status codes (status code field, DNR/phase applied by caller). */
+/*
+ * NVMe completion status: (SCT << 8) | SC, in the layout consumed by
+ * nvme_post_cqe() which shifts the whole value left by one to land SC in CQE
+ * bits 1-8 and SCT in bits 9-11. Generic Command Status (SCT=0) entries leave
+ * the upper byte zero; KV Command Specific Status (SCT=1) entries set bit 8
+ * so the host driver sees status_code_type=CMDSPEC alongside the KV SC code.
+ * Without the SCT bit the host parses these as SCT=0 (Generic) with reserved
+ * SC values, which xNVMe's Python KV tests assert against and reject.
+ */
 enum {
 	NVME_SUCCESS = 0x0000,
 	NVME_INVALID_OPCODE = 0x0001,
 	NVME_INVALID_FIELD = 0x0002,
-	NVME_CAP_EXCEEDED = 0x0081,
-	NVME_KV_INVALID_VAL_SIZE = 0x0085,
-	NVME_KV_INVALID_KEY_SIZE = 0x0086,
-	NVME_KV_KEY_NOT_EXISTS = 0x0087,
-	NVME_KV_KEY_EXISTS = 0x0089,
+	NVME_CAP_EXCEEDED = 0x0181,
+	NVME_KV_INVALID_VAL_SIZE = 0x0185,
+	NVME_KV_INVALID_KEY_SIZE = 0x0186,
+	NVME_KV_KEY_NOT_EXISTS = 0x0187,
+	NVME_KV_KEY_EXISTS = 0x0189,
 };
 
 #define NVME_DNR 0x4000
