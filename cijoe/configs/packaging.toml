@@ -1,0 +1,15 @@
+# Package vfu_kvssd as a deb, and check one in a fresh Ubuntu, with
+# tasks/deb.yaml. The work runs where cijoe runs, as root on Ubuntu, unless a
+# [cijoe.transport.<name>] section names a host to run it on instead.
+#
+# The environment says what to package: KVSSD_VERSION the version, KVSSD_OUT
+# where the debs go, and KVSSD_BIN_X86_64 and KVSSD_BIN_AARCH64 the static
+# binaries for each architecture; an empty one is skipped.
+[packaging]
+version = "{{ local.env.KVSSD_VERSION }}"
+out = "{{ local.env.KVSSD_OUT }}"
+license = "{{ local.env.KVSSD_SRC }}/LICENSE"
+
+[packaging.binaries]
+x86_64 = "{{ local.env.KVSSD_BIN_X86_64 }}"
+aarch64 = "{{ local.env.KVSSD_BIN_AARCH64 }}"

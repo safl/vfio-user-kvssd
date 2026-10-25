@@ -49,12 +49,22 @@ jobs:
           file "$out"
           # Sanity: must be statically linked.
           file "$out" | grep -q "statically linked" || { echo "ERROR: $out not static"; exit 1; }
-          packaging/deb.sh "$out" "$ver" "$arch" dist
         done
-        docker run --rm -v "$PWD:/src:ro" -w /src ubuntu:26.04 \
-          sh packaging/test-deb.sh "dist/vfio-user-kvssd_${ver}_amd64.deb"
+        # cijoe's tasks/deb.yaml packages both and checks the amd64 one in a fresh Ubuntu
+        docker run --rm -v "$PWD:/src" -w /src/cijoe -e KVSSD_SRC=/src -e KVSSD_VERSION="$ver" \
+          -e KVSSD_OUT=/src/dist -e KVSSD_BIN_X86_64="/src/dist/vfu_kvssd-${ver}-x86_64-linux" \
+          -e KVSSD_BIN_AARCH64="/src/dist/vfu_kvssd-${ver}-aarch64-linux" ubuntu:26.04 bash -c \
+          'apt-get -qq update && apt-get -qq install -y pipx >/dev/null && pipx install -q cijoe==0.9.61 &&
+           ~/.local/bin/cijoe tasks/deb.yaml -c configs/packaging.toml --monitor -o cijoe-output/deb'
         (cd dist && sha256sum vfu_kvssd-* vfio-user-kvssd_*.deb > SHA256SUMS)
         ls -lh dist
+
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: cijoe-report-deb
+        path: cijoe/cijoe-output/deb/report.html
+        if-no-files-found: warn
 
     - name: Publish GitHub release
       uses: softprops/action-gh-release@v2
