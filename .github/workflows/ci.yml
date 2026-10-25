@@ -48,6 +48,12 @@ jobs:
     - name: Run client harness against the static binary
       run: ./tests/run_harness.sh zig-out/bin
 
+    - name: Package the static binary as a deb and install it in a fresh Ubuntu
+      run: |
+        ver=$(sed -n 's/^ *\.version = "\(.*\)",/\1/p' build.zig.zon)
+        deb=$(packaging/deb.sh zig-out/bin/vfu_kvssd "$ver" x86_64 dist)
+        docker run --rm -v "$PWD:/src:ro" -w /src ubuntu:26.04 sh packaging/test-deb.sh "$deb"
+
     - name: Strip and upload artifact
       run: |
         "$HOME/zig/zig" build -Dtarget=x86_64-linux-musl -Dstatic=true -Doptimize=ReleaseSafe

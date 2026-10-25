@@ -3,7 +3,7 @@ name: release
 
 # Build the static, dependency-free vfu_kvssd binary for x86_64 and aarch64
 # (Zig cross-compiles both from one runner) and publish them to a GitHub
-# release. Triggered by pushing a version tag, e.g. `git tag v0.1.0 && git push --tags`.
+# release, each also as a deb for hosts that install with apt. Triggered by pushing a version tag, e.g. `git tag v0.1.0 && git push --tags`.
 on:
   push:
     tags: ["v*"]
@@ -49,8 +49,11 @@ jobs:
           file "$out"
           # Sanity: must be statically linked.
           file "$out" | grep -q "statically linked" || { echo "ERROR: $out not static"; exit 1; }
+          packaging/deb.sh "$out" "$ver" "$arch" dist
         done
-        (cd dist && sha256sum vfu_kvssd-* > SHA256SUMS)
+        docker run --rm -v "$PWD:/src:ro" -w /src ubuntu:26.04 \
+          sh packaging/test-deb.sh "dist/vfio-user-kvssd_${ver}_amd64.deb"
+        (cd dist && sha256sum vfu_kvssd-* vfio-user-kvssd_*.deb > SHA256SUMS)
         ls -lh dist
 
     - name: Publish GitHub release
@@ -59,4 +62,5 @@ jobs:
         generate_release_notes: true
         files: |
           dist/vfu_kvssd-*-linux
+          dist/vfio-user-kvssd_*.deb
           dist/SHA256SUMS
