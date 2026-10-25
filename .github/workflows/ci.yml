@@ -48,11 +48,21 @@ jobs:
     - name: Run client harness against the static binary
       run: ./tests/run_harness.sh zig-out/bin
 
+    # cijoe's tasks/deb.yaml, in a fresh Ubuntu, as it runs anywhere else
     - name: Package the static binary as a deb and install it in a fresh Ubuntu
       run: |
         ver=$(sed -n 's/^ *\.version = "\(.*\)",/\1/p' build.zig.zon)
-        deb=$(packaging/deb.sh zig-out/bin/vfu_kvssd "$ver" x86_64 dist)
-        docker run --rm -v "$PWD:/src:ro" -w /src ubuntu:26.04 sh packaging/test-deb.sh "$deb"
+        docker run --rm -v "$PWD:/src" -w /src/cijoe -e KVSSD_SRC=/src -e KVSSD_VERSION="$ver" \
+          -e KVSSD_OUT=/src/dist -e KVSSD_BIN_X86_64=/src/zig-out/bin/vfu_kvssd -e KVSSD_BIN_AARCH64= ubuntu:26.04 bash -c \
+          'apt-get -qq update && apt-get -qq install -y pipx >/dev/null && pipx install -q cijoe==0.9.61 &&
+           ~/.local/bin/cijoe tasks/deb.yaml -c configs/packaging.toml --monitor -o cijoe-output/deb'
+
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: cijoe-report-deb
+        path: cijoe/cijoe-output/deb/report.html
+        if-no-files-found: warn
 
     - name: Strip and upload artifact
       run: |

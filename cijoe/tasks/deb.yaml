@@ -1,0 +1,15 @@
+---
+doc: |
+  Package vfu_kvssd as a deb per architecture, and check the native one
+
+  Packages each static binary 'packaging.binaries' names, then installs the
+  deb for this machine's architecture and checks that the binary runs as the
+  version the package claims. Run it in a fresh Ubuntu, as root: the check
+  installs the package.
+
+steps:
+- name: deb_package
+  uses: deb_package
+
+- name: deb_check
+  uses: deb_check
