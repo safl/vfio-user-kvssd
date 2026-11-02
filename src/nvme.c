@@ -434,11 +434,9 @@ nvme_admin_identify(struct nvme_ctrl *n, const NvmeSqe *sqe)
 		break;
 	case NVME_ID_CNS_IO_CMD_SET:
 		/* I/O Command Set data structure: byte 0 is the command-set bit
-		 * vector for combination 0. Advertise NVM (bit 0). KV is driven
-		 * via the generic char device, not a kernel-attached command
-		 * set, so it is intentionally not advertised here (matches the
-		 * SamsungDS/qemu for-xnvme behaviour). */
-		buf[0] = (uint8_t)(1u << NVME_CSI_NVM);
+		 * vector for combination 0. Advertise NVM (bit 0) and KV (bit 1),
+		 * matching CAP.CSS and the namespace's CSI descriptor (CNS 0x3). */
+		buf[0] = (uint8_t)((1u << NVME_CSI_NVM) | (1u << NVME_CSI_KV));
 		break;
 	default:
 		return NVME_INVALID_FIELD | NVME_DNR;

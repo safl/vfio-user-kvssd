@@ -330,13 +330,14 @@ main(int argc, char **argv)
 	}
 	printf("  cs-ind-ns nstat = ready\n");
 
-	/* I/O Command Set data structure (CNS 0x1c): advertises NVM (bit 0). */
+	/* I/O Command Set data structure (CNS 0x1c): advertises NVM (bit 0) and KV (bit 1). */
 	memset(mem + DATA_IOVA, 0, PAGE);
 	admin_identify(sock, asq, acq, 4, 5, 0x1c, "identify-io-cmd-set");
-	if (!(mem[DATA_IOVA] & 0x01)) {
-		errx(EXIT_FAILURE, "io-cmd-set: NVM bit not set (%#x)", mem[DATA_IOVA]);
+	const uint8_t iocs_want = (1u << NVME_CSI_NVM) | (1u << NVME_CSI_KV);
+	if ((mem[DATA_IOVA] & iocs_want) != iocs_want) {
+		errx(EXIT_FAILURE, "io-cmd-set: NVM and KV bits not both set (%#x)", mem[DATA_IOVA]);
 	}
-	printf("  io-cmd-set advertises NVM\n");
+	printf("  io-cmd-set advertises NVM and KV\n");
 
 	NvmeKVCmd *iosq = (NvmeKVCmd *)(mem + IOSQ_IOVA);
 	NvmeCqe *iocq = (NvmeCqe *)(mem + IOCQ_IOVA);
