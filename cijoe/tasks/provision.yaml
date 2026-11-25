@@ -44,7 +44,8 @@ steps:
     commands:
     - "sudo cloud-init status --wait || true"
     - "uname -a"
-    - "git clone --recursive --depth 1 https://github.com/xnvme/xnvme.git"
+    # A release, as main renames the test programs test.yaml runs
+    - "git clone --recursive --depth 1 --branch v0.8.1 https://github.com/xnvme/xnvme.git"
     # xNVMe's dependency script for the guest's release, by its codename
     - "cd xnvme && sudo ./toolbox/pkgs/ubuntu-$(. /etc/os-release && echo $VERSION_CODENAME).sh"
     # Build with liburing (for io_uring_cmd) + the in-tree upcie backend;
