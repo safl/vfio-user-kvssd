@@ -49,8 +49,8 @@ system_args.tcp_forward = {host = 4200, guest = 22}
 # for reproducibility. The workflow fetches + gunzips it to the guest boot.img.
 [guest_image]
 registry = "ghcr.io"
-repository = "safl/nosi/ubuntu-2604-headless"
-digest = "sha256:919e85401b034921ebcea8e167e1fe744929ffd9a7aedf6b3ba60694bba2723d"
+repository = "refenv/nosi/ubuntu-2604-headless"
+digest = "sha256:effa6ddd9f63e52c19f5d400a0c4b99dfb62c0008a8073ad302d13a461820b54"
 
 # The device under test. cijoe runs from the cijoe/ dir, so 'binary' is given
 # relative to that (one level up to the repo root, where zig emits it).
