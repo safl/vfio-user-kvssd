@@ -38,7 +38,7 @@ jobs:
     timeout-minutes: 60
     container:
       # nosi ubuntu-2604-docker: QEMU 10.2 + cijoe, CI-tuned bootstrap host.
-      image: ghcr.io/safl/nosi/ubuntu-2604-docker:latest
+      image: ghcr.io/refenv/nosi/ubuntu-2604-docker:latest
       # --privileged exposes the runner's /dev/kvm for nested KVM.
       options: --privileged
       # Needed only if the nosi package is private; harmless if it is public.
