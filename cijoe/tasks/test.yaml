@@ -17,12 +17,12 @@ steps:
   with:
     transport: ssh
     commands:
-    - "sudo kvs enum"
-    - "sudo kvs idfy-ns /dev/ng0n1 --nsid 1"
+    - "sudo /usr/local/libexec/xnvme/xnvme-test-kv enum"
+    - "sudo /usr/local/libexec/xnvme/xnvme-test-kv idfy-ns /dev/ng0n1 --nsid 1"
     # 1. kernel ioctl
-    - "sudo xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1"
+    - "sudo /usr/local/libexec/xnvme/xnvme-test-kvs kvs_io /dev/ng0n1 --dev-nsid 1"
     # 2. io_uring_cmd (async kernel passthru; needs liburing)
-    - "sudo xnvme_tests_kvs kvs_io /dev/ng0n1 --dev-nsid 1 --be io_uring_cmd"
+    - "sudo /usr/local/libexec/xnvme/xnvme-test-kvs kvs_io /dev/ng0n1 --dev-nsid 1 --be io_uring_cmd"
     # 3. upcie userspace backend: reserve hugepages, bind the controller to
     #    uio_pci_generic, run on the PCIe BDF, then restore the kernel driver.
     - |
@@ -33,5 +33,5 @@ steps:
       sudo modprobe uio_pci_generic || true
       trap 'sudo devbind --bind nvme --device "$bdf" || true' EXIT
       sudo devbind --bind uio_pci_generic --device "$bdf"
-      sudo xnvme_tests_kvs kvs_io "$bdf" --dev-nsid 1 --be upcie
+      sudo /usr/local/libexec/xnvme/xnvme-test-kvs kvs_io "$bdf" --dev-nsid 1 --be upcie
     - "lspci -nn"

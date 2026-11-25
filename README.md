@@ -68,7 +68,7 @@ qemu-system-x86_64 \
   -device vfio-user-pci,socket=/tmp/vfu_kvssd.sock
 
 # 3. In the guest the KV namespace appears as a generic char device, e.g.
-#    /dev/ng0n1, ready for xNVMe KV tools (kvs, xnvme_tests_kvs).
+#    /dev/ng0n1, ready for xNVMe's KV test programs (xnvme-test-kv, xnvme-test-kvs).
 ```
 
 The automated guest bring-up + xNVMe KV tests run under cijoe in CI; see
